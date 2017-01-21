@@ -9,6 +9,8 @@ import System.IO
 import System.Exit
 import System.Environment
 import Data.IORef (newIORef, readIORef, IORef)
+import Foreign.Marshal.Alloc (alloca)
+import Foreign.Storable (peek)
 
 bool :: Bool -> a -> a -> a
 bool b falseRes trueRes = if b then trueRes else falseRes
@@ -71,3 +73,13 @@ render :: IORef AppState -> IO ()
 render st = do
   glClearColor 0.2 0.3 0.3 1.0
   glClear GL_COLOR_BUFFER_BIT
+  vbo <- alloca $ \buf -> do
+    glGenBuffers 1 buf
+    peek buf
+  glBindBuffer GL_ARRAY_BUFFER vbo
+  return ()
+
+firstTriangle = [ -0.5, -0.5, 0.0
+                ,  0.5, -0.5, 0.0
+                ,  0.0,  0.5, 0.0
+                ]
