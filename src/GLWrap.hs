@@ -43,6 +43,9 @@ module GLWrap ( createShader
               , LL.ClearBufferBit(..)
               , LL.ClearBufferMask
               , LL.clear
+              , LL.deleteVertexArrays
+              , LL.deleteBuffers
+              , LL.deleteProgram
               ) where
 
 import Graphics.GL.Core33

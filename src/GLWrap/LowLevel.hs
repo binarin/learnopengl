@@ -52,6 +52,9 @@ module GLWrap.LowLevel
   , ClearBufferBit(..)
   , ClearBufferMask
   , clear
+  , deleteVertexArrays
+  , deleteBuffers
+  , deleteProgram
   ) where
 
 import Data.Bits
@@ -297,3 +300,22 @@ serializeClearBufferMask = foldr (.|.) 0 . map serializeClearBufferBit
 
 clear :: ClearBufferMask -> IO ()
 clear m = glClear (serializeClearBufferMask m)
+
+deleteVertexArrays :: [VertexArray] -> IO ()
+deleteVertexArrays vaos = do
+  let len = length vaos
+  let vaosWithConstructorStripped = map (\(VertexArray vao) -> vao) vaos
+  arr <- newListArray (0, len - 1) vaosWithConstructorStripped
+  withStorableArray arr $ \ptr ->
+    glDeleteVertexArrays (fromIntegral len) ptr
+
+deleteBuffers :: [Buffer] -> IO ()
+deleteBuffers vbos = do
+  let len = length vbos
+  let vbosWithConstructorStripped = map (\(Buffer vbo) -> vbo) vbos
+  arr <- newListArray (0, len - 1) vbosWithConstructorStripped
+  withStorableArray arr $ \ptr ->
+    glDeleteBuffers (fromIntegral len) ptr
+
+deleteProgram :: Program -> IO ()
+deleteProgram (Program pid) = glDeleteProgram pid
