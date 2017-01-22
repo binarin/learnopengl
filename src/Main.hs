@@ -1,16 +1,27 @@
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE RecordWildCards, QuasiQuotes, OverloadedStrings #-}
 
 module Main where
 
 import qualified Graphics.UI.GLFW as GLFW
 import Graphics.GL.Core33
 
+import Control.Monad (when)
 import System.IO
 import System.Exit
 import System.Environment
 import Data.IORef (newIORef, readIORef, IORef)
 import Foreign.Marshal.Alloc (alloca)
+import Foreign.Marshal.Utils (with)
 import Foreign.Storable (peek)
+import Data.Array.Storable (withStorableArray)
+import Data.Array.MArray (newListArray)
+import Text.RawString.QQ
+import Foreign.Ptr
+import qualified Data.ByteString.Unsafe as BU
+import qualified Data.ByteString as B
+
+import qualified GLWrap as GL
 
 bool :: Bool -> a -> a -> a
 bool b falseRes trueRes = if b then trueRes else falseRes
@@ -77,7 +88,46 @@ render st = do
     glGenBuffers 1 buf
     peek buf
   glBindBuffer GL_ARRAY_BUFFER vbo
+  bufferData firstTriangle
+  vertexShader
   return ()
+
+
+vertexShaderSrc :: B.ByteString
+vertexShaderSrc = [r|#version 330 core
+layout (location = 0) in vec3 position;
+
+void main()
+{
+  gl_Position = vec4(position.x, position.y, position.z, 1.0);
+}
+|]
+
+vertexShader :: IO ()
+vertexShader = do
+  shaderId <- glCreateShader GL_VERTEX_SHADER
+  BU.unsafeUseAsCStringLen vertexShaderSrc $ \(ptr, size) ->
+    with ptr $ \srcPtrBuf ->
+      with (fromIntegral size) $ \sizeBuf ->
+        glShaderSource shaderId 1 srcPtrBuf sizeBuf
+  glCompileShader shaderId
+  success <- getShader'compileStatus
+  success <- alloca $ \(buf :: Ptr GLint) -> do
+    glGetShaderiv shaderId GL_COMPILE_STATUS buf
+    peek buf
+  when (success /= 0) $ do
+    return ()
+  return ()
+
+
+bufferData :: [GLfloat] -> IO ()
+bufferData lst = do
+  let len = length lst
+  arr <- newListArray (0, len - 1) lst
+  withStorableArray arr $ \ptr ->
+    glBufferData GL_ARRAY_BUFFER (fromIntegral $ 4 * len) ptr GL_STATIC_DRAW
+  return ()
+
 
 firstTriangle = [ -0.5, -0.5, 0.0
                 ,  0.5, -0.5, 0.0
