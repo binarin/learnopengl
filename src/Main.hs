@@ -56,7 +56,7 @@ main = do
     maybeBracket createAction GLFW.destroyWindow (exitWithErr "failed to create window") $ \window -> do
       GLFW.makeContextCurrent $ Just window
       (width, height) <- GLFW.getFramebufferSize window
-      glViewport (fromIntegral width) (fromIntegral height) 0 0
+      glViewport 0 0 (fromIntegral width) (fromIntegral height)
       appState <- initializeApp window
       appStateRef <- newIORef appState
       GLFW.setKeyCallback window $ Just $ keyCallback appStateRef
