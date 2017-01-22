@@ -4,24 +4,13 @@
 module Main where
 
 import qualified Graphics.UI.GLFW as GLFW
-import Graphics.GL.Core33
 
-import Control.Monad (when)
 import System.IO
 import System.Exit
-import System.Environment
 import Data.IORef (newIORef, readIORef, IORef)
-import Foreign.Marshal.Alloc (alloca)
-import Foreign.Marshal.Utils (with)
-import Foreign.Storable (peek)
-import Data.Array.Storable (withStorableArray)
-import Data.Array.MArray (newListArray)
-import Data.Array.Unboxed
 import Text.RawString.QQ
-import Foreign.Ptr
-import qualified Data.ByteString.Unsafe as BU
 import qualified Data.ByteString as B
-import Control.Exception (bracket, finally)
+import Control.Exception (finally)
 
 import qualified GLWrap as GL
 
@@ -57,7 +46,7 @@ main = do
     maybeBracket createAction GLFW.destroyWindow (exitWithErr "failed to create window") $ \window -> do
       GLFW.makeContextCurrent $ Just window
       (width, height) <- GLFW.getFramebufferSize window
-      glViewport 0 0 (fromIntegral width) (fromIntegral height)
+      GL.viewport (GL.WinCoord 0) (GL.WinCoord 0) (GL.toWidth width) (GL.toHeight height)
       appState <- initializeApp window
       appStateRef <- newIORef appState
       GLFW.setKeyCallback window $ Just $ keyCallback appStateRef
@@ -96,8 +85,8 @@ mainLoop st = do
 render :: IORef AppState -> IO ()
 render st = do
   AppState{..} <- readIORef st
-  glClearColor 0.2 0.3 0.3 1.0
-  glClear GL_COLOR_BUFFER_BIT
+  GL.clearColor $ GL.RGBA 0.2 0.3 0.3 1.0
+  GL.clear [GL.ClearColor]
   GL.useProgram shaderProgram
   GL.bindVertexArray triangleVAO
   -- GL.polygonMode GL.FaceBoth GL.PolyLine
@@ -125,14 +114,6 @@ void main()
 }
 |]
 
-bufferData :: [GLfloat] -> IO ()
-bufferData lst = do
-  let len = length lst
-  arr <- newListArray (0, len - 1) lst
-  withStorableArray arr $ \ptr ->
-    glBufferData GL_ARRAY_BUFFER (fromIntegral $ 4 * len) ptr GL_STATIC_DRAW
-  return ()
-
 errorCb err desc = do
   putStrLn desc
 
@@ -144,11 +125,12 @@ initializeApp window = do
   GL.bindVertexArray vao
 
   GL.bindBuffer GL.TargetArray vbo
-  bufferData [  0.5,  0.5, 0.0
-             ,  0.5, -0.5, 0.0
-             , -0.5, -0.5, 0.0
-             , -0.5,  0.5, 0.0
-             ]
+  GL.floatBufferData GL.TargetArray GL.UsageStaticDraw
+    [  0.5,  0.5, 0.0
+    ,  0.5, -0.5, 0.0
+    , -0.5, -0.5, 0.0
+    , -0.5,  0.5, 0.0
+    ]
 
   GL.bindBuffer GL.TargetElementArray ebo
   GL.uintBufferData GL.TargetElementArray GL.UsageStaticDraw

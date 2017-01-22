@@ -34,22 +34,36 @@ module GLWrap.LowLevel
   , bindBuffer
   , BufferUsage(..)
   , uintBufferData
+  , floatBufferData
   , DrawElementType(..)
   , drawElements
   , MaterialFace(..)
   , PolygonMode(..)
   , polygonMode
+  , WinCoord(..)
+  , Width(..)
+  , Height(..)
+  , viewport
+  , toWinCoord
+  , toHeight
+  , toWidth
+  , RGBA(..)
+  , clearColor
+  , ClearBufferBit(..)
+  , ClearBufferMask
+  , clear
   ) where
 
+import Data.Bits
 import Foreign.Ptr
 import Graphics.GL.Core33
 import Foreign.Marshal.Alloc (alloca)
 import Foreign.Marshal.Array (allocaArray, peekArray)
 import Data.Array.MArray (newListArray)
 import Data.Array.Storable (withStorableArray)
-import Foreign.Storable (peek)
+import Foreign.Storable (peek, Storable)
 import Foreign.Marshal.Utils (with)
-import Data.ByteString hiding (head, length)
+import Data.ByteString hiding (head, length, map, foldr)
 import qualified Data.ByteString.Unsafe as BU
 
 newtype Shader = Shader GLuint
@@ -213,7 +227,13 @@ serializeUsage :: BufferUsage -> GLenum
 serializeUsage UsageStaticDraw = GL_STATIC_DRAW
 
 uintBufferData :: BufferTarget -> BufferUsage -> [GLuint] -> IO ()
-uintBufferData tgt usage lst = do
+uintBufferData = bufferData4byte
+
+floatBufferData :: BufferTarget -> BufferUsage -> [GLfloat] -> IO ()
+floatBufferData = bufferData4byte
+
+bufferData4byte :: (Storable a) => BufferTarget -> BufferUsage -> [a] -> IO ()
+bufferData4byte tgt usage lst = do
   let len = length lst
   arr <- newListArray (0, len - 1) lst
   withStorableArray arr $ \ptr ->
@@ -242,3 +262,38 @@ serializePolygonMode PolyPoint = GL_POINT
 
 polygonMode matFace polyMode =
   glPolygonMode (serializeMaterialFace matFace) (serializePolygonMode polyMode)
+
+newtype WinCoord = WinCoord GLint
+newtype Width = Width GLsizei
+newtype Height = Height GLsizei
+
+viewport :: WinCoord -> WinCoord -> Width -> Height -> IO ()
+viewport (WinCoord x) (WinCoord y) (Width w) (Height h) =
+  glViewport x y w h
+
+toWinCoord :: Integral a => a -> WinCoord
+toWinCoord a = WinCoord $ fromIntegral a
+
+toWidth :: Integral a => a -> Width
+toWidth a = Width $ fromIntegral a
+
+toHeight :: Integral a => a -> Height
+toHeight a = Height $ fromIntegral a
+
+data RGBA = RGBA GLfloat GLfloat GLfloat GLfloat
+
+clearColor :: RGBA -> IO ()
+clearColor (RGBA r g b a) = glClearColor r g b a
+
+data ClearBufferBit = ClearColor | ClearDepth | ClearStencil
+
+type ClearBufferMask = [ClearBufferBit]
+
+serializeClearBufferBit ClearColor = GL_COLOR_BUFFER_BIT
+serializeClearBufferBit ClearDepth = GL_DEPTH_BUFFER_BIT
+serializeClearBufferBit ClearStencil = GL_STENCIL_BUFFER_BIT
+
+serializeClearBufferMask = foldr (.|.) 0 . map serializeClearBufferBit
+
+clear :: ClearBufferMask -> IO ()
+clear m = glClear (serializeClearBufferMask m)

@@ -25,11 +25,24 @@ module GLWrap ( createShader
               , LL.bindBuffer
               , LL.BufferUsage(..)
               , LL.uintBufferData
+              , LL.floatBufferData
               , LL.DrawElementType(..)
               , LL.drawElements
               , LL.MaterialFace(..)
               , LL.PolygonMode(..)
               , LL.polygonMode
+              , LL.WinCoord(..)
+              , LL.Width(..)
+              , LL.Height(..)
+              , LL.viewport
+              , LL.toWinCoord
+              , LL.toHeight
+              , LL.toWidth
+              , LL.RGBA(..)
+              , LL.clearColor
+              , LL.ClearBufferBit(..)
+              , LL.ClearBufferMask
+              , LL.clear
               ) where
 
 import Graphics.GL.Core33
