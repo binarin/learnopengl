@@ -32,15 +32,24 @@ module GLWrap.LowLevel
   , genBuffers
   , BufferTarget(..)
   , bindBuffer
+  , BufferUsage(..)
+  , uintBufferData
+  , DrawElementType(..)
+  , drawElements
+  , MaterialFace(..)
+  , PolygonMode(..)
+  , polygonMode
   ) where
 
 import Foreign.Ptr
 import Graphics.GL.Core33
 import Foreign.Marshal.Alloc (alloca)
 import Foreign.Marshal.Array (allocaArray, peekArray)
+import Data.Array.MArray (newListArray)
+import Data.Array.Storable (withStorableArray)
 import Foreign.Storable (peek)
 import Foreign.Marshal.Utils (with)
-import Data.ByteString hiding (head)
+import Data.ByteString hiding (head, length)
 import qualified Data.ByteString.Unsafe as BU
 
 newtype Shader = Shader GLuint
@@ -188,9 +197,48 @@ genBuffers count = do
     peekArray (fromIntegral count) buf
   return $ fmap Buffer vbos
 
-data BufferTarget = TargetArray
+data BufferTarget = TargetArray | TargetElementArray
+
+serializeTarget :: BufferTarget -> GLenum
+serializeTarget TargetArray = GL_ARRAY_BUFFER
+serializeTarget TargetElementArray = GL_ELEMENT_ARRAY_BUFFER
 
 bindBuffer :: BufferTarget -> Buffer -> IO ()
 bindBuffer tgt (Buffer vbo) = glBindBuffer (serializeTarget tgt) vbo
   where
-    serializeTarget TargetArray = GL_ARRAY_BUFFER
+
+data BufferUsage = UsageStaticDraw
+
+serializeUsage :: BufferUsage -> GLenum
+serializeUsage UsageStaticDraw = GL_STATIC_DRAW
+
+uintBufferData :: BufferTarget -> BufferUsage -> [GLuint] -> IO ()
+uintBufferData tgt usage lst = do
+  let len = length lst
+  arr <- newListArray (0, len - 1) lst
+  withStorableArray arr $ \ptr ->
+    glBufferData (serializeTarget tgt) (fromIntegral $ 4 * len) ptr (serializeUsage usage)
+
+data DrawElementType = ElementGLuint
+
+serializeDrawElementType ElementGLuint = GL_UNSIGNED_INT
+
+drawElements :: Integral count => PrimitiveType -> count -> DrawElementType -> IO ()
+drawElements primType cnt drawType = glDrawElements (serializePrimitiveType primType) (fromIntegral cnt) (serializeDrawElementType drawType) nullPtr
+
+
+data MaterialFace = FaceBack | FaceFront | FaceBoth
+
+serializeMaterialFace :: MaterialFace -> GLenum
+serializeMaterialFace FaceBack = GL_BACK
+serializeMaterialFace FaceFront = GL_FRONT
+serializeMaterialFace FaceBoth = GL_FRONT_AND_BACK
+
+data PolygonMode = PolyLine | PolyFill | PolyPoint
+
+serializePolygonMode PolyLine = GL_LINE
+serializePolygonMode PolyFill = GL_FILL
+serializePolygonMode PolyPoint = GL_POINT
+
+polygonMode matFace polyMode =
+  glPolygonMode (serializeMaterialFace matFace) (serializePolygonMode polyMode)

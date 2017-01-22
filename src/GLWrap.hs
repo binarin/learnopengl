@@ -23,6 +23,13 @@ module GLWrap ( createShader
               , LL.genBuffers
               , LL.BufferTarget(..)
               , LL.bindBuffer
+              , LL.BufferUsage(..)
+              , LL.uintBufferData
+              , LL.DrawElementType(..)
+              , LL.drawElements
+              , LL.MaterialFace(..)
+              , LL.PolygonMode(..)
+              , LL.polygonMode
               ) where
 
 import Graphics.GL.Core33

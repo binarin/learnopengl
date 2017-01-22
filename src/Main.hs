@@ -16,6 +16,7 @@ import Foreign.Marshal.Utils (with)
 import Foreign.Storable (peek)
 import Data.Array.Storable (withStorableArray)
 import Data.Array.MArray (newListArray)
+import Data.Array.Unboxed
 import Text.RawString.QQ
 import Foreign.Ptr
 import qualified Data.ByteString.Unsafe as BU
@@ -99,7 +100,8 @@ render st = do
   glClear GL_COLOR_BUFFER_BIT
   GL.useProgram shaderProgram
   GL.bindVertexArray triangleVAO
-  GL.drawArrays GL.TypeTriangles 0 3
+  -- GL.polygonMode GL.FaceBoth GL.PolyLine
+  GL.drawElements GL.TypeTriangles 6 GL.ElementGLuint
   GL.unbindVertexArray
   return ()
 
@@ -131,12 +133,6 @@ bufferData lst = do
     glBufferData GL_ARRAY_BUFFER (fromIntegral $ 4 * len) ptr GL_STATIC_DRAW
   return ()
 
-
-firstTriangle = [ -0.5, -0.5, 0.0
-                ,  0.5, -0.5, 0.0
-                ,  0.0,  0.5, 0.0
-                ]
-
 errorCb err desc = do
   putStrLn desc
 
@@ -144,9 +140,22 @@ initializeApp :: GLFW.Window -> IO AppState
 initializeApp window = do
   vao <- GL.genVertexArray
   vbo <- GL.genBuffer
+  ebo <- GL.genBuffer
   GL.bindVertexArray vao
+
   GL.bindBuffer GL.TargetArray vbo
-  bufferData firstTriangle
+  bufferData [  0.5,  0.5, 0.0
+             ,  0.5, -0.5, 0.0
+             , -0.5, -0.5, 0.0
+             , -0.5,  0.5, 0.0
+             ]
+
+  GL.bindBuffer GL.TargetElementArray ebo
+  GL.uintBufferData GL.TargetElementArray GL.UsageStaticDraw
+    [ 0, 1, 2
+    , 0, 2, 3
+    ]
+
   GL.vertexAttribPointer 0 3 GL.AttribPointerFloat False 12 0
   GL.enableVertexAttribArray 0
   GL.unbindVertexArray
@@ -155,7 +164,7 @@ initializeApp window = do
   fragmentShader <- GL.createShader GL.FragmentShader fragmentShaderSrc
   prog <- GL.createProgram [vertexShader, fragmentShader]
   GL.useProgram prog
-  mapM_ GL.deleteShader [vertexShader, fragmentShader]
+  mapM_ GL.deleteShader ([vertexShader, fragmentShader] :: [GL.Shader])
 
   return $ AppState { _window = window
                     , triangleVAO = vao
