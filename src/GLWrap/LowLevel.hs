@@ -17,6 +17,9 @@ module GLWrap.LowLevel
   , getProgramInfoLog
   , useProgram
   , deleteShader
+  , AttribPointerType(..)
+  , vertexAttribPointer
+  , enableVertexAttribArray
   ) where
 
 import Foreign.Ptr
@@ -116,3 +119,19 @@ useProgram (Program pid) = glUseProgram pid
 
 deleteShader :: Shader -> IO ()
 deleteShader (Shader sid) = glDeleteShader sid
+
+data AttribPointerType = AttribPointerFloat
+
+vertexAttribPointer :: Integral a => GLuint -> GLint -> AttribPointerType -> Bool -> GLsizei -> a -> IO ()
+vertexAttribPointer index size typ normalized stride offset = do
+  glVertexAttribPointer index size rawType rawNormalized stride offsetAsPtr
+  where
+    rawType = case typ of
+                AttribPointerFloat -> GL_FLOAT
+    rawNormalized = case normalized of
+      True -> GL_TRUE
+      False -> GL_FALSE
+    offsetAsPtr = plusPtr nullPtr (fromIntegral offset)
+
+enableVertexAttribArray :: GLuint -> IO ()
+enableVertexAttribArray = glEnableVertexAttribArray

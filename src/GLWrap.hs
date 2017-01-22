@@ -8,6 +8,9 @@ module GLWrap ( createShader
               , Program
               , useProgram
               , deleteShader
+              , LL.AttribPointerType(..)
+              , LL.vertexAttribPointer
+              , LL.enableVertexAttribArray
               ) where
 
 import Graphics.GL.Core33

@@ -97,6 +97,8 @@ render st = do
     peek buf
   glBindBuffer GL_ARRAY_BUFFER vbo
   bufferData firstTriangle
+  -- GL.vertexAttribPointer 0 3 GL.AttribPointerFloat False 12 0
+  -- GL.enableVertexAttribArray 0
   vertexShader <- GL.createShader GL.VertexShader vertexShaderSrc
   fragmentShader <- GL.createShader GL.FragmentShader fragmentShaderSrc
   prog <- GL.createProgram [vertexShader, fragmentShader]
