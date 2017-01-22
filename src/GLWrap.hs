@@ -14,6 +14,7 @@ import Data.ByteString
 import qualified Data.Text as T
 import Data.Typeable
 import Control.Exception
+import Data.Monoid
 import Data.Text.Encoding (decodeUtf8With)
 
 import qualified GLWrap.LowLevel as LL
@@ -22,7 +23,7 @@ import GLWrap.LowLevel (Shader, ShaderType)
 data ShaderError = ShaderError T.Text deriving (Typeable)
 instance Exception ShaderError
 instance Show ShaderError where
-  show (ShaderError t) = show t
+  show (ShaderError t) = "Shader compilation failed: " <> T.unpack t
 
 createShader :: ShaderType -> ByteString -> IO Shader
 createShader shaderType src = do

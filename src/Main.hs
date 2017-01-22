@@ -20,41 +20,49 @@ import Text.RawString.QQ
 import Foreign.Ptr
 import qualified Data.ByteString.Unsafe as BU
 import qualified Data.ByteString as B
+import Control.Exception (bracket, finally)
 
 import qualified GLWrap as GL
 
-bool :: Bool -> a -> a -> a
-bool b falseRes trueRes = if b then trueRes else falseRes
-
-maybe' :: Maybe a -> b -> (a -> b) -> b
-maybe' m nothingRes f = case m of
-    Nothing -> nothingRes
-    Just x  -> f x
-
-errorCb err desc = do
-  putStrLn desc
-
 data AppState = AppState { _window :: GLFW.Window }
+
+
+boolBracket :: IO Bool -> IO () -> IO a -> IO a -> IO a
+boolBracket action cleanup onErr onSuccess = do
+  success <- action
+  case success of
+    True -> onSuccess `finally` cleanup
+    False -> onErr
+
+maybeBracket :: IO (Maybe a) -> (a -> IO ()) -> IO b -> (a -> IO b) -> IO b
+maybeBracket action cleanup onErr onSuccess = do
+  result <- action
+  case result of
+    Nothing -> onErr
+    Just val -> onSuccess val `finally` cleanup val
 
 main :: IO ()
 main = do
   GLFW.setErrorCallback $ Just errorCb
-  successfulInit <- GLFW.init
-  bool successfulInit exitFailure $ do
+  boolBracket GLFW.init GLFW.terminate (exitWithErr "init failed") $ do
     GLFW.windowHint $ GLFW.WindowHint'ContextVersionMajor 3
     GLFW.windowHint $ GLFW.WindowHint'ContextVersionMinor 3
     GLFW.windowHint $ GLFW.WindowHint'OpenGLProfile GLFW.OpenGLProfile'Core
     GLFW.windowHint $ GLFW.WindowHint'Resizable False
-    mw <- GLFW.createWindow 800 600 "LearnOpenGL" Nothing Nothing
-    maybe' mw (GLFW.terminate >> exitFailure) $ \window -> do
-      GLFW.makeContextCurrent mw
+    let createAction = GLFW.createWindow 800 600 "LearnOpenGL" Nothing Nothing
+    maybeBracket createAction GLFW.destroyWindow (exitWithErr "failed to create window") $ \window -> do
+      GLFW.makeContextCurrent $ Just window
       (width, height) <- GLFW.getFramebufferSize window
       glViewport (fromIntegral width) (fromIntegral height) 0 0
       appState <- newIORef $ AppState window
       GLFW.setKeyCallback window $ Just $ keyCallback appState
       mainLoop appState
-      GLFW.destroyWindow window
-      exitSuccess
+      return ()
+
+  where
+    exitWithErr err = do
+      putStrLn err
+      exitFailure
 
 keyCallback :: IORef AppState -> GLFW.Window -> GLFW.Key -> Int -> GLFW.KeyState -> GLFW.ModifierKeys -> IO ()
 keyCallback st window key scancode action mode =
@@ -116,3 +124,6 @@ firstTriangle = [ -0.5, -0.5, 0.0
                 ,  0.5, -0.5, 0.0
                 ,  0.0,  0.5, 0.0
                 ]
+
+errorCb err desc = do
+  putStrLn desc
