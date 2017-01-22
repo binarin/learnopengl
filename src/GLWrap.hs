@@ -1,16 +1,28 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 module GLWrap ( createShader
-              , Shader
-              , ShaderType(..)
               , ShaderError
               , createProgram
               , ProgramError
-              , Program
-              , useProgram
-              , deleteShader
+              , LL.Shader
+              , LL.ShaderType(..)
+              , LL.Program
+              , LL.useProgram
+              , LL.deleteShader
               , LL.AttribPointerType(..)
               , LL.vertexAttribPointer
               , LL.enableVertexAttribArray
+              , LL.bindVertexArray
+              , LL.VertexArray
+              , LL.genVertexArray
+              , LL.genVertexArrays
+              , LL.unbindVertexArray
+              , LL.drawArrays
+              , LL.PrimitiveType(..)
+              , LL.Buffer
+              , LL.genBuffer
+              , LL.genBuffers
+              , LL.BufferTarget(..)
+              , LL.bindBuffer
               ) where
 
 import Graphics.GL.Core33

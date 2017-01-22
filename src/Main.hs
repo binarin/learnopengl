@@ -24,7 +24,10 @@ import Control.Exception (bracket, finally)
 
 import qualified GLWrap as GL
 
-data AppState = AppState { _window :: GLFW.Window }
+data AppState = AppState { _window :: GLFW.Window
+                         , triangleVAO :: GL.VertexArray
+                         , shaderProgram :: GL.Program
+                         }
 
 
 boolBracket :: IO Bool -> IO () -> IO a -> IO a -> IO a
@@ -54,9 +57,10 @@ main = do
       GLFW.makeContextCurrent $ Just window
       (width, height) <- GLFW.getFramebufferSize window
       glViewport (fromIntegral width) (fromIntegral height) 0 0
-      appState <- newIORef $ AppState window
-      GLFW.setKeyCallback window $ Just $ keyCallback appState
-      mainLoop appState
+      appState <- initializeApp window
+      appStateRef <- newIORef appState
+      GLFW.setKeyCallback window $ Just $ keyCallback appStateRef
+      mainLoop appStateRef
       return ()
 
   where
@@ -90,20 +94,13 @@ mainLoop st = do
 
 render :: IORef AppState -> IO ()
 render st = do
+  AppState{..} <- readIORef st
   glClearColor 0.2 0.3 0.3 1.0
   glClear GL_COLOR_BUFFER_BIT
-  vbo <- alloca $ \buf -> do
-    glGenBuffers 1 buf
-    peek buf
-  glBindBuffer GL_ARRAY_BUFFER vbo
-  bufferData firstTriangle
-  -- GL.vertexAttribPointer 0 3 GL.AttribPointerFloat False 12 0
-  -- GL.enableVertexAttribArray 0
-  vertexShader <- GL.createShader GL.VertexShader vertexShaderSrc
-  fragmentShader <- GL.createShader GL.FragmentShader fragmentShaderSrc
-  prog <- GL.createProgram [vertexShader, fragmentShader]
-  GL.useProgram prog
-  mapM_ GL.deleteShader [vertexShader, fragmentShader]
+  GL.useProgram shaderProgram
+  GL.bindVertexArray triangleVAO
+  GL.drawArrays GL.TypeTriangles 0 3
+  GL.unbindVertexArray
   return ()
 
 fragmentShaderSrc :: B.ByteString
@@ -142,3 +139,25 @@ firstTriangle = [ -0.5, -0.5, 0.0
 
 errorCb err desc = do
   putStrLn desc
+
+initializeApp :: GLFW.Window -> IO AppState
+initializeApp window = do
+  vao <- GL.genVertexArray
+  vbo <- GL.genBuffer
+  GL.bindVertexArray vao
+  GL.bindBuffer GL.TargetArray vbo
+  bufferData firstTriangle
+  GL.vertexAttribPointer 0 3 GL.AttribPointerFloat False 12 0
+  GL.enableVertexAttribArray 0
+  GL.unbindVertexArray
+
+  vertexShader <- GL.createShader GL.VertexShader vertexShaderSrc
+  fragmentShader <- GL.createShader GL.FragmentShader fragmentShaderSrc
+  prog <- GL.createProgram [vertexShader, fragmentShader]
+  GL.useProgram prog
+  mapM_ GL.deleteShader [vertexShader, fragmentShader]
+
+  return $ AppState { _window = window
+                    , triangleVAO = vao
+                    , shaderProgram = prog
+                    }

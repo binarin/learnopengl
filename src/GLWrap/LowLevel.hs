@@ -20,15 +20,27 @@ module GLWrap.LowLevel
   , AttribPointerType(..)
   , vertexAttribPointer
   , enableVertexAttribArray
+  , VertexArray
+  , genVertexArray
+  , genVertexArrays
+  , bindVertexArray
+  , unbindVertexArray
+  , drawArrays
+  , PrimitiveType(..)
+  , Buffer
+  , genBuffer
+  , genBuffers
+  , BufferTarget(..)
+  , bindBuffer
   ) where
 
 import Foreign.Ptr
 import Graphics.GL.Core33
 import Foreign.Marshal.Alloc (alloca)
-import Foreign.Marshal.Array (allocaArray)
+import Foreign.Marshal.Array (allocaArray, peekArray)
 import Foreign.Storable (peek)
 import Foreign.Marshal.Utils (with)
-import Data.ByteString
+import Data.ByteString hiding (head)
 import qualified Data.ByteString.Unsafe as BU
 
 newtype Shader = Shader GLuint
@@ -135,3 +147,50 @@ vertexAttribPointer index size typ normalized stride offset = do
 
 enableVertexAttribArray :: GLuint -> IO ()
 enableVertexAttribArray = glEnableVertexAttribArray
+
+newtype VertexArray = VertexArray GLuint
+
+genVertexArray :: IO VertexArray
+genVertexArray = head <$> genVertexArrays 1
+
+genVertexArrays :: Integral a => a -> IO [VertexArray]
+genVertexArrays count = do
+  vaos <- allocaArray (fromIntegral count) $ \buf -> do
+    glGenVertexArrays (fromIntegral count) buf
+    peekArray (fromIntegral count) buf
+  return $ fmap VertexArray vaos
+
+bindVertexArray :: VertexArray -> IO ()
+bindVertexArray (VertexArray vao) = glBindVertexArray vao
+
+unbindVertexArray :: IO ()
+unbindVertexArray = glBindVertexArray 0
+
+data PrimitiveType = TypeLines | TypeTriangles
+
+serializePrimitiveType :: PrimitiveType -> GLenum
+serializePrimitiveType TypeLines = GL_LINES
+serializePrimitiveType TypeTriangles = GL_TRIANGLES
+
+drawArrays :: (Integral first, Integral count) => PrimitiveType -> first -> count -> IO ()
+drawArrays typ first count = do
+  glDrawArrays (serializePrimitiveType typ) (fromIntegral first) (fromIntegral count)
+
+newtype Buffer = Buffer GLuint
+
+genBuffer :: IO Buffer
+genBuffer = head <$> genBuffers 1
+
+genBuffers :: Integral a => a -> IO [Buffer]
+genBuffers count = do
+  vbos <- allocaArray (fromIntegral count) $ \buf -> do
+    glGenBuffers (fromIntegral count) buf
+    peekArray (fromIntegral count) buf
+  return $ fmap Buffer vbos
+
+data BufferTarget = TargetArray
+
+bindBuffer :: BufferTarget -> Buffer -> IO ()
+bindBuffer tgt (Buffer vbo) = glBindBuffer (serializeTarget tgt) vbo
+  where
+    serializeTarget TargetArray = GL_ARRAY_BUFFER
