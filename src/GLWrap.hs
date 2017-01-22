@@ -6,6 +6,8 @@ module GLWrap ( createShader
               , createProgram
               , ProgramError
               , Program
+              , useProgram
+              , deleteShader
               ) where
 
 import Graphics.GL.Core33
@@ -22,7 +24,7 @@ import Data.Monoid
 import Data.Text.Encoding (decodeUtf8With)
 
 import qualified GLWrap.LowLevel as LL
-import GLWrap.LowLevel (Shader, ShaderType, Program)
+import GLWrap.LowLevel (Shader, ShaderType, Program, useProgram, deleteShader)
 
 data ShaderError = ShaderError T.Text deriving (Typeable)
 instance Exception ShaderError

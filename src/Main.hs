@@ -100,6 +100,8 @@ render st = do
   vertexShader <- GL.createShader GL.VertexShader vertexShaderSrc
   fragmentShader <- GL.createShader GL.FragmentShader fragmentShaderSrc
   prog <- GL.createProgram [vertexShader, fragmentShader]
+  GL.useProgram prog
+  mapM_ GL.deleteShader [vertexShader, fragmentShader]
   return ()
 
 fragmentShaderSrc :: B.ByteString

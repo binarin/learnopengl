@@ -15,6 +15,8 @@ module GLWrap.LowLevel
   , getProgram'linkStatus
   , getProgram'infoLogLength
   , getProgramInfoLog
+  , useProgram
+  , deleteShader
   ) where
 
 import Foreign.Ptr
@@ -108,3 +110,9 @@ getProgramInfoLog prog@(Program pid) = do
           glGetShaderInfoLog pid (fromIntegral logLen) gotBytes ptr
           reallyGot <- peek gotBytes
           packCStringLen (ptr, fromIntegral reallyGot)
+
+useProgram :: Program -> IO ()
+useProgram (Program pid) = glUseProgram pid
+
+deleteShader :: Shader -> IO ()
+deleteShader (Shader sid) = glDeleteShader sid
