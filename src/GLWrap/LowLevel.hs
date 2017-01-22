@@ -8,6 +8,13 @@ module GLWrap.LowLevel
   , shaderSource
   , createShader
   , compileShader
+  , Program
+  , createProgram
+  , attachShader
+  , linkProgram
+  , getProgram'linkStatus
+  , getProgram'infoLogLength
+  , getProgramInfoLog
   ) where
 
 import Foreign.Ptr
@@ -24,6 +31,8 @@ newtype Shader = Shader GLuint
 data ShaderType = VertexShader
                 | FragmentShader
                 deriving (Eq, Ord, Show)
+
+newtype Program = Program GLuint
 
 getShaderiv :: Shader -> GLenum -> IO GLint
 getShaderiv (Shader shaderId) param = do
@@ -65,3 +74,37 @@ createShader t = Shader <$> glCreateShader rawT
 
 compileShader :: Shader -> IO ()
 compileShader (Shader shaderId) = glCompileShader shaderId
+
+createProgram :: IO Program
+createProgram = Program <$> glCreateProgram
+
+attachShader :: Program -> Shader -> IO ()
+attachShader (Program pid) (Shader sid) = glAttachShader pid sid
+
+linkProgram :: Program -> IO ()
+linkProgram (Program pid) = glLinkProgram pid
+
+getProgramiv :: Program -> GLenum -> IO GLint
+getProgramiv (Program programId) param = do
+  alloca $ \(buf :: Ptr GLint) -> do
+    glGetProgramiv programId param buf
+    peek buf
+
+getProgram'linkStatus :: Program -> IO Bool
+getProgram'linkStatus p = do
+  success <- getProgramiv p GL_LINK_STATUS
+  case fromIntegral success of
+    GL_TRUE -> return True
+    GL_FALSE -> return False
+
+getProgram'infoLogLength :: Num a => Program -> IO a
+getProgram'infoLogLength p = fromIntegral <$> getProgramiv p GL_INFO_LOG_LENGTH
+
+getProgramInfoLog :: Program -> IO ByteString
+getProgramInfoLog prog@(Program pid) = do
+      logLen <- getProgram'infoLogLength prog
+      alloca $ \gotBytes -> do
+        allocaArray logLen $ \ptr -> do
+          glGetShaderInfoLog pid (fromIntegral logLen) gotBytes ptr
+          reallyGot <- peek gotBytes
+          packCStringLen (ptr, fromIntegral reallyGot)

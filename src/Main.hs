@@ -98,8 +98,19 @@ render st = do
   glBindBuffer GL_ARRAY_BUFFER vbo
   bufferData firstTriangle
   vertexShader <- GL.createShader GL.VertexShader vertexShaderSrc
+  fragmentShader <- GL.createShader GL.FragmentShader fragmentShaderSrc
+  prog <- GL.createProgram [vertexShader, fragmentShader]
   return ()
 
+fragmentShaderSrc :: B.ByteString
+fragmentShaderSrc = [r|#version 330 core
+out vec4 color;
+
+void main()
+{
+    color = vec4(1.0f, 0.5f, 0.2f, 1.0f);
+}
+|]
 
 vertexShaderSrc :: B.ByteString
 vertexShaderSrc = [r|#version 330 core
