@@ -89,7 +89,7 @@ render st = do
     peek buf
   glBindBuffer GL_ARRAY_BUFFER vbo
   bufferData firstTriangle
-  vertexShader
+  vertexShader <- GL.createShader GL.VertexShader vertexShaderSrc
   return ()
 
 
@@ -102,23 +102,6 @@ void main()
   gl_Position = vec4(position.x, position.y, position.z, 1.0);
 }
 |]
-
-vertexShader :: IO ()
-vertexShader = do
-  shaderId <- glCreateShader GL_VERTEX_SHADER
-  BU.unsafeUseAsCStringLen vertexShaderSrc $ \(ptr, size) ->
-    with ptr $ \srcPtrBuf ->
-      with (fromIntegral size) $ \sizeBuf ->
-        glShaderSource shaderId 1 srcPtrBuf sizeBuf
-  glCompileShader shaderId
-  success <- getShader'compileStatus
-  success <- alloca $ \(buf :: Ptr GLint) -> do
-    glGetShaderiv shaderId GL_COMPILE_STATUS buf
-    peek buf
-  when (success /= 0) $ do
-    return ()
-  return ()
-
 
 bufferData :: [GLfloat] -> IO ()
 bufferData lst = do

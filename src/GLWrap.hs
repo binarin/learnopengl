@@ -1,71 +1,42 @@
 {-# LANGUAGE ScopedTypeVariables #-}
-module GLWrap ( getShader'infoLogLength
-              , getShader'compileStatus
-              , createShader
-              , Shader(..)
+module GLWrap ( createShader
+              , Shader
+              , ShaderType(..)
+              , ShaderError
               ) where
 
 import Graphics.GL.Core33
 import Foreign.Marshal.Alloc (alloca)
 import Foreign.Marshal.Array (allocaArray)
 import Foreign.Storable (peek)
-import Foreign.Marshal.Utils (with)
 import Foreign.Ptr
 import Data.ByteString
-import qualified Data.ByteString.Unsafe as BU
+import qualified Data.Text as T
+import Data.Typeable
+import Control.Exception
+import Data.Text.Encoding (decodeUtf8With)
 
+import qualified GLWrap.LowLevel as LL
+import GLWrap.LowLevel (Shader, ShaderType)
 
-data ShaderType = VertexShader
-                | FragmentShader
-                deriving (Eq, Ord, Show)
+data ShaderError = ShaderError T.Text deriving (Typeable)
+instance Exception ShaderError
+instance Show ShaderError where
+  show (ShaderError t) = show t
 
-newtype Shader = Shader GLuint
-
-shaderSource :: Shader -> ByteString -> IO ()
-shaderSource (Shader shaderId) src =
-  BU.unsafeUseAsCStringLen src $ \(ptr, size) ->
-    with ptr $ \srcPtrBuf ->
-      with (fromIntegral size) $ \sizeBuf ->
-        glShaderSource shaderId 1 srcPtrBuf sizeBuf
-
-
-compileShader :: Shader -> IO (Either ByteString ())
-compileShader shader@(Shader shaderId) = do
-  glCompileShader shaderId
-  status <- getShader'compileStatus shader
-  case status of
-    True -> return $ Right ()
-    False -> do
-      logLen <- getShader'infoLogLength shader
-      alloca $ \gotBytes -> do
-        allocaArray logLen $ \ptr -> do
-          glGetShaderInfoLog shaderId (fromIntegral logLen) gotBytes ptr
-          reallyGot <- peek gotBytes
-          Left <$> packCStringLen (ptr, fromIntegral reallyGot)
-
-
-createShader :: ShaderType -> ByteString -> IO (Either ByteString Shader)
+createShader :: ShaderType -> ByteString -> IO Shader
 createShader shaderType src = do
-  shader <- Shader <$> glCreateShader shaderTypeRaw
-  shaderSource shader src
-  fmap (const shader) <$> compileShader shader
-  where
-    shaderTypeRaw = case shaderType of
-                      VertexShader -> GL_VERTEX_SHADER
-                      FragmentShader -> GL_FRAGMENT_SHADER
+  shader <- LL.createShader shaderType
+  LL.shaderSource shader src
+  compileShader shader
+  return shader
 
-getShaderiv :: Shader -> GLenum -> IO GLint
-getShaderiv (Shader shaderId) param = do
-  alloca $ \(buf :: Ptr GLint) -> do
-    glGetShaderiv shaderId param buf
-    peek buf
-
-getShader'compileStatus :: Shader -> IO Bool
-getShader'compileStatus s = do
-  success <- getShaderiv s GL_COMPILE_STATUS
-  case fromIntegral success of
-    GL_TRUE -> return True
-    GL_FALSE -> return False
-
-getShader'infoLogLength :: Num a => Shader -> IO a
-getShader'infoLogLength s = fromIntegral <$> getShaderiv s GL_INFO_LOG_LENGTH
+compileShader :: Shader -> IO ()
+compileShader shader = do
+  LL.compileShader shader
+  status <- LL.getShader'compileStatus shader
+  case status of
+    True -> return ()
+    False -> do
+      err <- LL.getShaderInfoLog shader
+      throw $ ShaderError $ decodeUtf8With (\_ _ -> Just '?') err
