@@ -366,13 +366,21 @@ texturedRectangle = do
 
   [texCont, texFace] <- GL.genTextures 2
 
-  GL.activeTexture GL.Texture0
   GL.bindTexture GL.Texture2D texCont
   GL.texParameter GL.Texture2D (GL.TextureWrapS GL.Repeat)
   GL.texParameter GL.Texture2D (GL.TextureWrapT GL.Repeat)
   GL.texParameter GL.Texture2D (GL.TextureMinFilter GL.MinLinear)
   GL.texParameter GL.Texture2D (GL.TextureMagFilter GL.MagLinear)
   GL.texImage2D "container.jpg"
+  GL.generateMipmap GL.Texture2D
+  GL.unbindTexture GL.Texture2D
+
+  GL.bindTexture GL.Texture2D texFace
+  GL.texParameter GL.Texture2D (GL.TextureWrapS GL.Repeat)
+  GL.texParameter GL.Texture2D (GL.TextureWrapT GL.Repeat)
+  GL.texParameter GL.Texture2D (GL.TextureMinFilter GL.MinLinear)
+  GL.texParameter GL.Texture2D (GL.TextureMagFilter GL.MagLinear)
+  GL.texImage2D "awesomeface.png"
   GL.generateMipmap GL.Texture2D
   GL.unbindTexture GL.Texture2D
 
@@ -386,26 +394,36 @@ texturedRectangle = do
       void main() {
         gl_Position = vec4(position, 1.0f);
         ourColor = color;
-        TexCoord = texCoord;
+        TexCoord = vec2(texCoord.x, 1.0f-texCoord.y);
       }
       |]
     [r|#version 330 core
       in vec3 ourColor;
       in vec2 TexCoord;
       out vec4 color;
-      uniform sampler2D ourTexture;
+      uniform sampler2D ourTexture1;
+      uniform sampler2D ourTexture2;
       void main() {
-        color = texture(ourTexture, TexCoord) * vec4(ourColor, 1.0f);
+        color = mix(texture(ourTexture1, TexCoord), texture(ourTexture2, TexCoord), 0.2);
       }
       |]
 
   let render = do
         GL.useProgram prog
+
+        GL.activeTexture GL.Texture0
         GL.bindTexture GL.Texture2D texCont
+        loc1 <- GL.getUniformLocation prog "ourTexture1"
+        GL.uniform1i loc1 0
+
+        GL.activeTexture GL.Texture1
+        GL.bindTexture GL.Texture2D texFace
+        loc2 <- GL.getUniformLocation prog "ourTexture2"
+        GL.uniform1i loc2 1
+
         GL.bindVertexArray vao
         GL.drawElements GL.TypeTriangles 6 GL.ElementGLuint
         GL.unbindVertexArray
-        GL.unbindTexture GL.Texture2D
 
   let cleanup = do
         GL.deleteVertexArrays [vao]
