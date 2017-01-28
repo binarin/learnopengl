@@ -393,13 +393,13 @@ texturedRectangle = do
       out vec4 color;
       uniform sampler2D ourTexture;
       void main() {
-        color = texture(ourTexture, TexCoord);
+        color = texture(ourTexture, TexCoord) * vec4(ourColor, 1.0f);
       }
       |]
 
   let render = do
         GL.useProgram prog
-        GL.bindTexture GL.Texture2D tex
+        GL.bindTexture GL.Texture2D texCont
         GL.bindVertexArray vao
         GL.drawElements GL.TypeTriangles 6 GL.ElementGLuint
         GL.unbindVertexArray
