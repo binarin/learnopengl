@@ -290,6 +290,9 @@ uniform4f (UniformLocation loc) x y z w = glUniform4f loc (toFloat x) (toFloat y
 uniform1f :: Floaty a => UniformLocation -> a -> IO ()
 uniform1f (UniformLocation loc) x = glUniform1f loc (toFloat x)
 
+uniform1i :: UniformLocation -> GLint -> IO ()
+uniform1i (UniformLocation loc) x = glUniform1i loc x
+
 newtype Texture = Texture GLuint
 
 genTexture :: IO Texture
@@ -432,3 +435,42 @@ texParameter tgt (TextureMagFilter filter) = texParameteri tgt TextureIMagFilter
 
 generateMipmap :: TextureTarget -> IO ()
 generateMipmap tgt = glGenerateMipmap (toGL tgt)
+
+data TextureUnit = Texture0
+                 | Texture1
+                 | Texture2
+                 | Texture3
+                 | Texture4
+                 | Texture5
+                 | Texture6
+                 | Texture7
+                 | Texture8
+                 | Texture9
+                 | Texture10
+                 | Texture11
+                 | Texture12
+                 | Texture13
+                 | Texture14
+                 | Texture15
+  deriving (Eq, Ord, Enum)
+
+instance ToGL TextureUnit where
+  toGLenum Texture0 = GL_TEXTURE0
+  toGLenum Texture1 = GL_TEXTURE1
+  toGLenum Texture2 = GL_TEXTURE2
+  toGLenum Texture3 = GL_TEXTURE3
+  toGLenum Texture4 = GL_TEXTURE4
+  toGLenum Texture5 = GL_TEXTURE5
+  toGLenum Texture6 = GL_TEXTURE6
+  toGLenum Texture7 = GL_TEXTURE7
+  toGLenum Texture8 = GL_TEXTURE8
+  toGLenum Texture9 = GL_TEXTURE9
+  toGLenum Texture10 = GL_TEXTURE10
+  toGLenum Texture11 = GL_TEXTURE11
+  toGLenum Texture12 = GL_TEXTURE12
+  toGLenum Texture13 = GL_TEXTURE13
+  toGLenum Texture14 = GL_TEXTURE14
+  toGLenum Texture15 = GL_TEXTURE15
+
+activeTexture :: TextureUnit -> IO ()
+activeTexture unit = glActiveTexture (toGL unit)

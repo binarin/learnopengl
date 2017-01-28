@@ -52,6 +52,7 @@ module GLWrap ( createShader
               , getUniformLocation
               , LL.uniform4f
               , LL.uniform1f
+              , LL.uniform1i
               , LL.genTexture
               , LL.genTextures
               , LL.bindTexture
@@ -65,6 +66,8 @@ module GLWrap ( createShader
               , LL.TextureMagFilter(..)
               , LL.deleteTextures
               , LL.generateMipmap
+              , LL.TextureUnit(..)
+              , LL.activeTexture
               ) where
 
 import Graphics.GL.Core33
