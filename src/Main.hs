@@ -364,8 +364,10 @@ texturedRectangle = do
 
   GL.unbindVertexArray
 
-  tex <- GL.genTexture
-  GL.bindTexture GL.Texture2D tex
+  [texCont, texFace] <- GL.genTextures 2
+
+  GL.activeTexture GL.Texture0
+  GL.bindTexture GL.Texture2D texCont
   GL.texParameter GL.Texture2D (GL.TextureWrapS GL.Repeat)
   GL.texParameter GL.Texture2D (GL.TextureWrapT GL.Repeat)
   GL.texParameter GL.Texture2D (GL.TextureMinFilter GL.MinLinear)
@@ -409,7 +411,7 @@ texturedRectangle = do
         GL.deleteVertexArrays [vao]
         GL.deleteBuffers [vbo, ebo]
         GL.deleteProgram prog
-        GL.deleteTextures [tex]
+        GL.deleteTextures [texCont, texFace]
         return ()
 
   return (render, cleanup)
