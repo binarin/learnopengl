@@ -22,6 +22,58 @@ data AppState = AppState { _window :: GLFW.Window
                          , cleanupFun :: IO ()
                          }
 
+
+triangleColorFromUniform :: IO (IO (), IO ())
+triangleColorFromUniform = do
+  vao <- GL.genVertexArray
+  vbo <- GL.genBuffer
+
+  GL.bindVertexArray vao
+  GL.bindBuffer GL.TargetArray vbo
+  GL.floatBufferData GL.TargetArray GL.UsageStaticDraw
+    [  0.5, -0.5, 0.0
+    , -0.5, -0.5, 0.0
+    ,    0,  0.5, 0.0
+    ]
+
+  GL.vertexAttribPointer 0 3 GL.AttribPointerFloat False 12 0
+  GL.enableVertexAttribArray 0
+  GL.unbindVertexArray
+
+  prog <- stdProgram vertexShaderSrc
+    [r|#version 330 core
+      out vec4 color;
+      uniform vec4 ourColor;
+      void main() {
+        color = ourColor;
+      }
+      |]
+
+  let calcGreenValue = do
+        maybeTime <- GLFW.getTime
+        case maybeTime of
+          Nothing -> return 0
+          Just time -> return $ (sin(time) / 2) + 0.5
+
+  vertexColorLocation <- GL.getUniformLocation prog "ourColor"
+
+  let render = do
+        GL.useProgram prog
+        greenValue <- calcGreenValue
+        GL.uniform4f vertexColorLocation 0 greenValue 0 1
+
+        GL.bindVertexArray vao
+        GL.drawArrays GL.TypeTriangles 0 3
+        GL.unbindVertexArray
+
+  let cleanup = do
+        GL.deleteVertexArrays [vao]
+        GL.deleteBuffers [vbo]
+        GL.deleteProgram prog
+
+  return (render, cleanup)
+
+
 triangleUsingArray :: IO (IO (), IO ())
 triangleUsingArray = do
   vao <- GL.genVertexArray
@@ -343,7 +395,8 @@ errorCb err desc = do
   putStrLn desc
 
 
-supportedRenderers = [ triangleUsingArray
+supportedRenderers = [ triangleColorFromUniform
+                     , triangleUsingArray
                      , doubleTrianglesArray
                      , rectangleUsingElements
                      , doubleTrianglesDifferentArrays

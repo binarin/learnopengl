@@ -46,6 +46,9 @@ module GLWrap ( createShader
               , LL.deleteVertexArrays
               , LL.deleteBuffers
               , LL.deleteProgram
+              , LL.UniformLocation
+              , LL.getUniformLocation
+              , LL.uniform4f
               ) where
 
 import Graphics.GL.Core33

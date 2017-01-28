@@ -1,61 +1,5 @@
 {-# LANGUAGE ScopedTypeVariables #-}
-module GLWrap.LowLevel
-  ( Shader
-  , ShaderType(..)
-  , getShader'compileStatus
-  , getShader'infoLogLength
-  , getShaderInfoLog
-  , shaderSource
-  , createShader
-  , compileShader
-  , Program
-  , createProgram
-  , attachShader
-  , linkProgram
-  , getProgram'linkStatus
-  , getProgram'infoLogLength
-  , getProgramInfoLog
-  , useProgram
-  , deleteShader
-  , AttribPointerType(..)
-  , vertexAttribPointer
-  , enableVertexAttribArray
-  , VertexArray
-  , genVertexArray
-  , genVertexArrays
-  , bindVertexArray
-  , unbindVertexArray
-  , drawArrays
-  , PrimitiveType(..)
-  , Buffer
-  , genBuffer
-  , genBuffers
-  , BufferTarget(..)
-  , bindBuffer
-  , BufferUsage(..)
-  , uintBufferData
-  , floatBufferData
-  , DrawElementType(..)
-  , drawElements
-  , MaterialFace(..)
-  , PolygonMode(..)
-  , polygonMode
-  , WinCoord(..)
-  , Width(..)
-  , Height(..)
-  , viewport
-  , toWinCoord
-  , toHeight
-  , toWidth
-  , RGBA(..)
-  , clearColor
-  , ClearBufferBit(..)
-  , ClearBufferMask
-  , clear
-  , deleteVertexArrays
-  , deleteBuffers
-  , deleteProgram
-  ) where
+module GLWrap.LowLevel where
 
 import Data.Bits
 import Foreign.Ptr
@@ -68,6 +12,7 @@ import Foreign.Storable (peek, Storable)
 import Foreign.Marshal.Utils (with)
 import Data.ByteString hiding (head, length, map, foldr)
 import qualified Data.ByteString.Unsafe as BU
+import GHC.Float (double2Float)
 
 newtype Shader = Shader GLuint
 
@@ -319,3 +264,23 @@ deleteBuffers vbos = do
 
 deleteProgram :: Program -> IO ()
 deleteProgram (Program pid) = glDeleteProgram pid
+
+newtype UniformLocation = UniformLocation GLint
+
+getUniformLocation :: Program -> ByteString -> IO UniformLocation
+getUniformLocation (Program pid) name = do
+  useAsCString name $ \ptr ->
+    UniformLocation <$> glGetUniformLocation pid ptr
+
+
+class Floaty a where
+  toFloat :: a -> Float
+
+instance Floaty Float where
+  toFloat = id
+
+instance Floaty Double where
+  toFloat = double2Float
+
+uniform4f :: Floaty a => UniformLocation -> a -> a -> a -> a -> IO ()
+uniform4f (UniformLocation loc) x y z w = glUniform4f loc (toFloat x) (toFloat y) (toFloat z) (toFloat w)
