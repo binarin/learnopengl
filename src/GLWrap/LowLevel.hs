@@ -13,6 +13,7 @@ import Foreign.Marshal.Utils (with)
 import Data.ByteString hiding (head, length, map, foldr)
 import qualified Data.ByteString.Unsafe as BU
 import GHC.Float (double2Float)
+import qualified Data.Vector.Storable as VS
 
 newtype Shader = Shader GLuint
 
@@ -288,3 +289,56 @@ uniform4f (UniformLocation loc) x y z w = glUniform4f loc (toFloat x) (toFloat y
 
 uniform1f :: Floaty a => UniformLocation -> a -> IO ()
 uniform1f (UniformLocation loc) x = glUniform1f loc (toFloat x)
+
+newtype Texture = Texture GLuint
+
+genTexture :: IO Texture
+genTexture = head <$> genTextures 1
+
+genTextures :: Integral a => a -> IO [Texture]
+genTextures count = do
+  textures <- allocaArray (fromIntegral count) $ \buf -> do
+    glGenTextures (fromIntegral count) buf
+    peekArray (fromIntegral count) buf
+  return $ fmap Texture textures
+
+data TextureTarget = Texture1D | Texture2D | Texture3D
+
+serializeTextureTarget :: TextureTarget -> GLenum
+serializeTextureTarget Texture1D = GL_TEXTURE_1D
+serializeTextureTarget Texture2D = GL_TEXTURE_2D
+serializeTextureTarget Texture3D = GL_TEXTURE_3D
+
+data InternalFormat = InternalFormatRGB
+
+serializeInternalFormat :: InternalFormat -> GLint
+serializeInternalFormat InternalFormatRGB = fromIntegral GL_RGB
+
+data PixelFormat = PixelRGB
+
+serializePixelFormat :: PixelFormat -> GLenum
+serializePixelFormat PixelRGB = GL_RGB
+
+data PixelType = PixelGLubyte
+
+serializePixelType :: PixelType -> GLenum
+serializePixelType PixelGLubyte = GL_UNSIGNED_BYTE
+
+bindTexture :: TextureTarget -> Texture -> IO ()
+bindTexture target (Texture tid) = glBindTexture (serializeTextureTarget target) tid
+
+texImage2D :: Storable a => (Integral lod) => TextureTarget -> lod -> InternalFormat -> Width -> Height -> PixelFormat -> PixelType -> VS.Vector a -> IO ()
+texImage2D target lod intFmt (Width w) (Height h) pixFmt pixType vec = do
+  VS.unsafeWith vec $ \ptr -> do
+    glTexImage2D (serializeTextureTarget target) (fromIntegral lod) (serializeInternalFormat intFmt) w h 0 (serializePixelFormat pixFmt) (serializePixelType pixType) ptr
+
+deleteTextures :: [Texture] -> IO ()
+deleteTextures textures = do
+  let len = length textures
+  let texturesWithConstructorStripped = map (\(Texture texture) -> texture) textures
+  arr <- newListArray (0, len - 1) texturesWithConstructorStripped
+  withStorableArray arr $ \ptr ->
+    glDeleteTextures (fromIntegral len) ptr
+
+unbindTexture :: TextureTarget -> IO ()
+unbindTexture tgt = glBindTexture (serializeTextureTarget tgt) 0

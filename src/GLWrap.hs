@@ -1,3 +1,4 @@
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE OverloadedStrings #-}
 module GLWrap ( createShader
@@ -51,6 +52,12 @@ module GLWrap ( createShader
               , getUniformLocation
               , LL.uniform4f
               , LL.uniform1f
+              , LL.genTexture
+              , LL.genTextures
+              , LL.bindTexture
+              , LL.unbindTexture
+              , LL.TextureTarget(..)
+              , texImage2D
               ) where
 
 import Graphics.GL.Core33
@@ -65,6 +72,7 @@ import Control.Exception
 import Control.Monad
 import Data.Monoid
 import Data.Text.Encoding (decodeUtf8With)
+import qualified Codec.Picture as P
 
 import qualified GLWrap.LowLevel as LL
 import GLWrap.LowLevel (Shader, ShaderType, Program, useProgram, deleteShader)
@@ -115,3 +123,20 @@ createProgram shaders = do
 getUniformLocation :: Program -> ByteString -> IO LL.UniformLocation
 getUniformLocation prog name = do
   maybe (throw $ ProgramError $ "No uniform named " <> bs2Text name) id <$> LL.getUniformLocation prog name
+
+data TextureError = TextureError T.Text deriving (Typeable)
+instance Exception TextureError
+instance Show TextureError where
+  show (TextureError t) = "Texture error: " <> T.unpack t
+
+either' :: Either a b -> (a -> c) -> (b -> c) -> c
+either' val left right = either left right val
+
+texImage2D :: FilePath -> IO ()
+texImage2D file = do
+  imageResult <- P.readImage file
+  either' imageResult (throw . TextureError . T.pack) $ \image -> do
+    let P.Image{..} = P.convertRGB8 image
+    LL.texImage2D LL.Texture2D 0 LL.InternalFormatRGB
+      (LL.toWidth imageWidth) (LL.toHeight imageHeight) LL.PixelRGB LL.PixelGLubyte
+      imageData

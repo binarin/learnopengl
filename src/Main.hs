@@ -334,6 +334,80 @@ rectangleUsingElements = do
 
   return (render, cleanup)
 
+texturedRectangle :: IO (IO (), IO ())
+texturedRectangle = do
+  [vbo, ebo] <- GL.genBuffers 2
+  vao <- GL.genVertexArray
+
+  GL.bindVertexArray vao
+  GL.bindBuffer GL.TargetArray vbo
+  GL.floatBufferData GL.TargetArray GL.UsageStaticDraw
+    [  0.5,  0.5,  0,     1, 0, 0,   1, 1
+    ,  0.5, -0.5,  0,     0, 1, 0,   1, 0
+    , -0.5, -0.5,  0,     0, 0, 1,   0, 0
+    , -0.5,  0.5,  0,     1, 1, 0,   0, 1
+    ]
+  GL.vertexAttribPointer 0 3 GL.AttribPointerFloat False 32 0
+  GL.enableVertexAttribArray 0
+
+  GL.vertexAttribPointer 1 3 GL.AttribPointerFloat False 32 12
+  GL.enableVertexAttribArray 1
+
+  GL.vertexAttribPointer 2 2 GL.AttribPointerFloat False 32 24
+  GL.enableVertexAttribArray 2
+
+  GL.bindBuffer GL.TargetElementArray ebo
+  GL.uintBufferData GL.TargetElementArray GL.UsageStaticDraw
+    [ 0, 1, 2
+    , 0, 2, 3
+    ]
+
+  GL.unbindVertexArray
+
+  tex <- GL.genTexture
+  GL.bindTexture GL.Texture2D tex
+  GL.texImage2D "container.jpg"
+  GL.unbindTexture GL.Texture2D
+
+  prog <- stdProgram
+    [r|#version 330 core
+      layout (location = 0) in vec3 position;
+      layout (location = 1) in vec3 color;
+      layout (location = 2) in vec2 texCoord;
+      out vec3 ourColor;
+      out vec2 TexCoord;
+      void main() {
+        gl_Position = vec4(position, 1.0f);
+        ourColor = color;
+        TexCoord = texCoord;
+      }
+      |]
+    [r|#version 330 core
+      in vec3 ourColor;
+      in vec2 TexCoord;
+      out vec4 color;
+      uniform sampler2D ourTexture;
+      void main() {
+        color = texture(ourTexture, TexCoord);
+      }
+      |]
+
+  let render = do
+        GL.useProgram prog
+        GL.bindTexture GL.Texture2D tex
+        GL.bindVertexArray vao
+        GL.drawElements GL.TypeTriangles 6 GL.ElementGLuint
+        GL.unbindVertexArray
+        GL.unbindTexture GL.Texture2D
+
+  let cleanup = do
+        GL.deleteVertexArrays [vao]
+        GL.deleteBuffers [vbo, ebo]
+        GL.deleteProgram prog
+        return ()
+
+  return (render, cleanup)
+
 
 stdProgram :: B.ByteString -> B.ByteString -> IO GL.Program
 stdProgram vertexSrc fragmentSrc = do
@@ -451,7 +525,8 @@ errorCb err desc = do
   putStrLn desc
 
 
-supportedRenderers = [ triangleWithPerVertexColor
+supportedRenderers = [ texturedRectangle
+                     , triangleWithPerVertexColor
                      , triangleColorFromUniform
                      , triangleUsingArray
                      , doubleTrianglesArray

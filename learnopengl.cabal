@@ -26,3 +26,5 @@ executable learnopengl
                      , raw-strings-qq
                      , bytestring
                      , text
+                     , JuicyPixels
+                     , vector
