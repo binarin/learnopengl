@@ -309,6 +309,9 @@ serializeTextureTarget Texture1D = GL_TEXTURE_1D
 serializeTextureTarget Texture2D = GL_TEXTURE_2D
 serializeTextureTarget Texture3D = GL_TEXTURE_3D
 
+instance ToGL TextureTarget where
+  toGLenum = serializeTextureTarget
+
 data InternalFormat = InternalFormatRGB
 
 serializeInternalFormat :: InternalFormat -> GLint
@@ -342,3 +345,90 @@ deleteTextures textures = do
 
 unbindTexture :: TextureTarget -> IO ()
 unbindTexture tgt = glBindTexture (serializeTextureTarget tgt) 0
+
+
+class ToGL a where
+  toGLenum :: a -> GLenum
+
+toGL :: (ToGL a, Integral b) => a -> b
+toGL a = fromIntegral $ toGLenum a
+
+data TextureWrapParameter = ClampToEdge
+                          | ClampToBorder RGBA
+                          | MirroredRepeat
+                          | Repeat
+
+instance ToGL TextureWrapParameter where
+  toGLenum ClampToEdge = GL_CLAMP_TO_EDGE
+  toGLenum (ClampToBorder _) = GL_CLAMP_TO_BORDER
+  toGLenum MirroredRepeat = GL_MIRRORED_REPEAT
+  toGLenum Repeat = GL_REPEAT
+
+data TextureMinFilter = MinNearest
+                      | MinLinear
+                      | MinNearestMipmapNearest
+                      | MinNearestMipmapLinear
+                      | MinLinearMipmapNearest
+                      | MinLinearMipmapLinear
+
+instance ToGL TextureMinFilter where
+  toGLenum MinNearest = GL_NEAREST
+  toGLenum MinLinear = GL_LINEAR
+  toGLenum MinNearestMipmapNearest = GL_NEAREST_MIPMAP_NEAREST
+  toGLenum MinNearestMipmapLinear = GL_NEAREST_MIPMAP_LINEAR
+  toGLenum MinLinearMipmapNearest = GL_LINEAR_MIPMAP_NEAREST
+  toGLenum MinLinearMipmapLinear = GL_LINEAR_MIPMAP_LINEAR
+
+data TextureMagFilter = MagNearest
+                      | MagLinear
+
+instance ToGL TextureMagFilter where
+  toGLenum MagNearest = GL_NEAREST
+  toGLenum MagLinear = GL_LINEAR
+
+
+data TextureParameter = TextureWrapS TextureWrapParameter
+                      | TextureWrapT TextureWrapParameter
+                      | TextureMinFilter TextureMinFilter
+                      | TextureMagFilter TextureMagFilter
+
+data TextureParameterFV = TextureBorderColor RGBA
+instance ToGL TextureParameterFV where
+  toGLenum (TextureBorderColor _) = GL_TEXTURE_BORDER_COLOR
+
+texParameterfv :: TextureTarget -> TextureParameterFV -> IO ()
+texParameterfv tgt param@(TextureBorderColor (RGBA r g b a)) = do
+  arr <- newListArray (0, 3) [r, g, b, a]
+  withStorableArray arr $ \ptr ->
+    glTexParameterfv (serializeTextureTarget tgt) (toGL param) ptr
+
+data TextureParameterI = TextureIWrapS
+                       | TextureIWrapT
+                       | TextureIMinFilter
+                       | TextureIMagFilter
+
+instance ToGL TextureParameterI where
+  toGLenum TextureIWrapS = GL_TEXTURE_WRAP_S
+  toGLenum TextureIWrapT = GL_TEXTURE_WRAP_T
+  toGLenum TextureIMinFilter = GL_TEXTURE_MIN_FILTER
+  toGLenum TextureIMagFilter = GL_TEXTURE_MAG_FILTER
+
+texParameteri :: ToGL val => TextureTarget -> TextureParameterI -> val -> IO ()
+texParameteri tgt param value = do
+  glTexParameteri (toGL tgt) (toGL param) (toGL value)
+
+texParameter :: TextureTarget -> TextureParameter -> IO ()
+texParameter tgt (TextureWrapS (wrap@(ClampToBorder border))) = do
+  texParameteri tgt TextureIWrapS wrap
+  texParameterfv tgt (TextureBorderColor border)
+texParameter tgt (TextureWrapT (wrap@(ClampToBorder border))) = do
+  texParameteri tgt TextureIWrapT wrap
+  texParameterfv tgt (TextureBorderColor border)
+texParameter tgt (TextureWrapS wrap) = texParameteri tgt TextureIWrapS wrap
+texParameter tgt (TextureWrapT wrap) = texParameteri tgt TextureIWrapT wrap
+texParameter tgt (TextureMinFilter filter) = texParameteri tgt TextureIMinFilter filter
+texParameter tgt (TextureMagFilter filter) = texParameteri tgt TextureIMagFilter filter
+
+
+generateMipmap :: TextureTarget -> IO ()
+generateMipmap tgt = glGenerateMipmap (toGL tgt)

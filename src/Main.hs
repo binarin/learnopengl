@@ -366,7 +366,12 @@ texturedRectangle = do
 
   tex <- GL.genTexture
   GL.bindTexture GL.Texture2D tex
+  GL.texParameter GL.Texture2D (GL.TextureWrapS GL.Repeat)
+  GL.texParameter GL.Texture2D (GL.TextureWrapT GL.Repeat)
+  GL.texParameter GL.Texture2D (GL.TextureMinFilter GL.MinLinear)
+  GL.texParameter GL.Texture2D (GL.TextureMagFilter GL.MagLinear)
   GL.texImage2D "container.jpg"
+  GL.generateMipmap GL.Texture2D
   GL.unbindTexture GL.Texture2D
 
   prog <- stdProgram
@@ -404,6 +409,7 @@ texturedRectangle = do
         GL.deleteVertexArrays [vao]
         GL.deleteBuffers [vbo, ebo]
         GL.deleteProgram prog
+        GL.deleteTextures [tex]
         return ()
 
   return (render, cleanup)

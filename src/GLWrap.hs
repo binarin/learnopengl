@@ -58,6 +58,13 @@ module GLWrap ( createShader
               , LL.unbindTexture
               , LL.TextureTarget(..)
               , texImage2D
+              , LL.texParameter
+              , LL.TextureWrapParameter(..)
+              , LL.TextureParameter(..)
+              , LL.TextureMinFilter(..)
+              , LL.TextureMagFilter(..)
+              , LL.deleteTextures
+              , LL.generateMipmap
               ) where
 
 import Graphics.GL.Core33
