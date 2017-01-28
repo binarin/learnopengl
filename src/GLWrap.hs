@@ -1,4 +1,5 @@
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE OverloadedStrings #-}
 module GLWrap ( createShader
               , ShaderError
               , createProgram
@@ -47,7 +48,7 @@ module GLWrap ( createShader
               , LL.deleteBuffers
               , LL.deleteProgram
               , LL.UniformLocation
-              , LL.getUniformLocation
+              , getUniformLocation
               , LL.uniform4f
               ) where
 
@@ -56,7 +57,7 @@ import Foreign.Marshal.Alloc (alloca)
 import Foreign.Marshal.Array (allocaArray)
 import Foreign.Storable (peek)
 import Foreign.Ptr
-import Data.ByteString
+import Data.ByteString as B
 import qualified Data.Text as T
 import Data.Typeable
 import Control.Exception
@@ -95,6 +96,9 @@ compileShader shader = do
       err <- LL.getShaderInfoLog shader
       throw $ ShaderError $ decodeUtf8With (\_ _ -> Just '?') err
 
+bs2Text :: B.ByteString -> T.Text
+bs2Text = decodeUtf8With (\_ _ -> Just '?')
+
 createProgram :: [Shader] -> IO Program
 createProgram shaders = do
   prog <- LL.createProgram
@@ -106,3 +110,7 @@ createProgram shaders = do
     False -> do
       err <- LL.getProgramInfoLog prog
       throw $ ProgramError $ decodeUtf8With (\_ _ -> Just '?') err
+
+getUniformLocation :: Program -> ByteString -> IO LL.UniformLocation
+getUniformLocation prog name = do
+  maybe (throw $ ProgramError $ "No uniform named " <> bs2Text name) id <$> LL.getUniformLocation prog name

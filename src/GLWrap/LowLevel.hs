@@ -267,11 +267,12 @@ deleteProgram (Program pid) = glDeleteProgram pid
 
 newtype UniformLocation = UniformLocation GLint
 
-getUniformLocation :: Program -> ByteString -> IO UniformLocation
+getUniformLocation :: Program -> ByteString -> IO (Maybe UniformLocation)
 getUniformLocation (Program pid) name = do
-  useAsCString name $ \ptr ->
-    UniformLocation <$> glGetUniformLocation pid ptr
-
+  ret <- useAsCString name $ \ptr -> glGetUniformLocation pid ptr
+  case ret of
+    -1 -> return $ Nothing
+    _ -> return $ Just $ UniformLocation ret
 
 class Floaty a where
   toFloat :: a -> Float
