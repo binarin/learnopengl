@@ -19,6 +19,8 @@ executable learnopengl
   default-language:    Haskell2010
   other-modules:       GLWrap
                      , GLWrap.LowLevel
+                     , Hello
+                     , Textures
   build-depends:       base >= 4.7 && < 5
                      , GLFW-b
                      , OpenGLRaw

@@ -68,6 +68,7 @@ module GLWrap ( createShader
               , LL.generateMipmap
               , LL.TextureUnit(..)
               , LL.activeTexture
+              , stdProgram
               ) where
 
 import Graphics.GL.Core33
@@ -150,3 +151,12 @@ texImage2D file = do
     LL.texImage2D LL.Texture2D 0 LL.InternalFormatRGB
       (LL.toWidth imageWidth) (LL.toHeight imageHeight) LL.PixelRGB LL.PixelGLubyte
       imageData
+
+stdProgram :: B.ByteString -> B.ByteString -> IO LL.Program
+stdProgram vertexSrc fragmentSrc = do
+  vertexShader <- createShader LL.VertexShader vertexSrc
+  fragmentShader <- createShader LL.FragmentShader fragmentSrc
+  prog <- createProgram [vertexShader, fragmentShader]
+  LL.useProgram prog
+  mapM_ LL.deleteShader ([vertexShader, fragmentShader] :: [LL.Shader])
+  return prog
