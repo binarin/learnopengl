@@ -285,3 +285,6 @@ instance Floaty Double where
 
 uniform4f :: Floaty a => UniformLocation -> a -> a -> a -> a -> IO ()
 uniform4f (UniformLocation loc) x y z w = glUniform4f loc (toFloat x) (toFloat y) (toFloat z) (toFloat w)
+
+uniform1f :: Floaty a => UniformLocation -> a -> IO ()
+uniform1f (UniformLocation loc) x = glUniform1f loc (toFloat x)

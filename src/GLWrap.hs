@@ -50,6 +50,7 @@ module GLWrap ( createShader
               , LL.UniformLocation
               , getUniformLocation
               , LL.uniform4f
+              , LL.uniform1f
               ) where
 
 import Graphics.GL.Core33
