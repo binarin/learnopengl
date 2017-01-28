@@ -23,6 +23,58 @@ data AppState = AppState { _window :: GLFW.Window
                          }
 
 
+triangleWithPerVertexColor :: IO (IO (), IO ())
+triangleWithPerVertexColor = do
+  vao <- GL.genVertexArray
+  vbo <- GL.genBuffer
+
+  GL.bindVertexArray vao
+  GL.bindBuffer GL.TargetArray vbo
+  GL.floatBufferData GL.TargetArray GL.UsageStaticDraw
+    [  0.5, -0.5, 0.0, 1, 0, 0
+    , -0.5, -0.5, 0.0, 0, 1, 0
+    ,    0,  0.5, 0.0, 0, 0, 1
+    ]
+
+  GL.vertexAttribPointer 0 3 GL.AttribPointerFloat False 24 0
+  GL.enableVertexAttribArray 0
+
+  GL.vertexAttribPointer 1 3 GL.AttribPointerFloat False 24 12
+  GL.enableVertexAttribArray 1
+  GL.unbindVertexArray
+
+  prog <- stdProgram
+    [r|#version 330 core
+      layout (location = 0) in vec3 position;
+      layout (location = 1) in vec3 color;
+      out vec3 ourColor;
+      void main() {
+        gl_Position = vec4(position, 1.0);
+        ourColor = color;
+      }
+      |]
+    [r|#version 330 core
+      in vec3 ourColor;
+      out vec4 color;
+      void main() {
+        color = vec4(ourColor, 1.0);
+      }
+      |]
+
+  let render = do
+        GL.useProgram prog
+        GL.bindVertexArray vao
+        GL.drawArrays GL.TypeTriangles 0 3
+        GL.unbindVertexArray
+
+  let cleanup = do
+        GL.deleteVertexArrays [vao]
+        GL.deleteBuffers [vbo]
+        GL.deleteProgram prog
+
+  return (render, cleanup)
+
+
 triangleColorFromUniform :: IO (IO (), IO ())
 triangleColorFromUniform = do
   vao <- GL.genVertexArray
@@ -395,7 +447,8 @@ errorCb err desc = do
   putStrLn desc
 
 
-supportedRenderers = [ triangleColorFromUniform
+supportedRenderers = [ triangleWithPerVertexColor
+                     , triangleColorFromUniform
                      , triangleUsingArray
                      , doubleTrianglesArray
                      , rectangleUsingElements
