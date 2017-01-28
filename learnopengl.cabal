@@ -28,3 +28,4 @@ executable learnopengl
                      , text
                      , JuicyPixels
                      , vector
+                     , stm

@@ -13,10 +13,16 @@ import Text.RawString.QQ
 import qualified Data.ByteString as B
 import Control.Exception (finally)
 import Control.Monad (when)
+import qualified Control.Concurrent.STM.TQueue as TQueue
+import qualified Control.Concurrent.STM as STM
 
 import qualified GLWrap as GL
 
+type Scancode = Int
+type KeyEvent = (GLFW.Key, Scancode, GLFW.KeyState, GLFW.ModifierKeys)
+
 data AppState = AppState { _window :: GLFW.Window
+                         , input :: TQueue.TQueue KeyEvent
                          , states :: [IO (IO (), IO ())]
                          , renderFun :: IO ()
                          , cleanupFun :: IO ()
@@ -564,11 +570,13 @@ supportedRenderers = [ texturedRectangle
 initializeApp :: GLFW.Window -> IO AppState
 initializeApp window = do
   let r:rs = supportedRenderers
+  input <- TQueue.newTQueueIO
   (render, cleanup) <- r
   return $ AppState { _window = window
                     , states = rs ++ [r]
                     , renderFun = render
                     , cleanupFun = cleanup
+                    , input = input
                     }
 
 rotateRender :: IORef AppState -> IO ()
