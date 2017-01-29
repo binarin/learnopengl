@@ -53,6 +53,7 @@ module GLWrap ( createShader
               , LL.uniform4f
               , LL.uniform1f
               , LL.uniform1i
+              , LL.Texture
               , LL.genTexture
               , LL.genTextures
               , LL.bindTexture

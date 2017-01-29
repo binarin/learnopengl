@@ -1,3 +1,4 @@
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE OverloadedStrings #-}
 
@@ -11,18 +12,29 @@ import qualified Data.ByteString as B
 
 import Behaviour
 
-texturedRectangle :: IO (IO (), IO ())
-texturedRectangle = do
+data AppState = AppState { mix :: Float
+                         , vbo :: GL.Buffer
+                         , ebo :: GL.Buffer
+                         , vao :: GL.VertexArray
+                         , texCont :: GL.Texture
+                         , texFace :: GL.Texture
+                         , prog :: GL.Program
+                         }
+
+texturedRectangle = mkBehaviour initialize frame render cleanup
+
+initialize :: IO AppState
+initialize = do
   [vbo, ebo] <- GL.genBuffers 2
   vao <- GL.genVertexArray
 
   GL.bindVertexArray vao
   GL.bindBuffer GL.TargetArray vbo
   GL.floatBufferData GL.TargetArray GL.UsageStaticDraw
-    [  0.5,  0.5,  0,     1, 0, 0,   2, 2
-    ,  0.5, -0.5,  0,     0, 1, 0,   2, 0
+    [  0.5,  0.5,  0,     1, 0, 0,   1, 1
+    ,  0.5, -0.5,  0,     0, 1, 0,   1, 0
     , -0.5, -0.5,  0,     0, 0, 1,   0, 0
-    , -0.5,  0.5,  0,     1, 1, 0,   0, 2
+    , -0.5,  0.5,  0,     1, 1, 0,   0, 1
     ]
   GL.vertexAttribPointer 0 3 GL.AttribPointerFloat False 32 0
   GL.enableVertexAttribArray 0
@@ -85,28 +97,37 @@ texturedRectangle = do
       }
       |]
 
-  let render = do
-        GL.useProgram prog
+  let mix = 0
+  return $ AppState{..}
 
-        GL.activeTexture GL.Texture0
-        GL.bindTexture GL.Texture2D texCont
-        loc1 <- GL.getUniformLocation prog "ourTexture1"
-        GL.uniform1i loc1 0
 
-        GL.activeTexture GL.Texture1
-        GL.bindTexture GL.Texture2D texFace
-        loc2 <- GL.getUniformLocation prog "ourTexture2"
-        GL.uniform1i loc2 1
+frame :: [InputEvent] -> Float -> AppState -> AppState
+frame _ _ st = st
 
-        GL.bindVertexArray vao
-        GL.drawElements GL.TypeTriangles 6 GL.ElementGLuint
-        GL.unbindVertexArray
+render :: AppState -> IO ()
+render AppState{..} = do
+  GL.clearColor $ GL.RGBA 0.2 0.3 0.3 1.0
+  GL.clear [GL.ClearColor]
 
-  let cleanup = do
-        GL.deleteVertexArrays [vao]
-        GL.deleteBuffers [vbo, ebo]
-        GL.deleteProgram prog
-        GL.deleteTextures [texCont, texFace]
-        return ()
+  GL.useProgram prog
 
-  return (render, cleanup)
+  GL.activeTexture GL.Texture0
+  GL.bindTexture GL.Texture2D texCont
+  loc1 <- GL.getUniformLocation prog "ourTexture1"
+  GL.uniform1i loc1 0
+
+  GL.activeTexture GL.Texture1
+  GL.bindTexture GL.Texture2D texFace
+  loc2 <- GL.getUniformLocation prog "ourTexture2"
+  GL.uniform1i loc2 1
+
+  GL.bindVertexArray vao
+  GL.drawElements GL.TypeTriangles 6 GL.ElementGLuint
+  GL.unbindVertexArray
+
+cleanup :: AppState -> IO ()
+cleanup AppState{..} = do
+  GL.deleteVertexArrays [vao]
+  GL.deleteBuffers [vbo, ebo]
+  GL.deleteProgram prog
+  GL.deleteTextures [texCont, texFace]

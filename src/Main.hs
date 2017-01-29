@@ -15,6 +15,8 @@ import Control.Exception (finally)
 import Control.Monad (when)
 import qualified Control.Concurrent.STM.TQueue as TQueue
 import qualified Control.Concurrent.STM as STM
+import GHC.Float (double2Float)
+import Data.Maybe (fromMaybe)
 
 import qualified GLWrap as GL
 import Hello
@@ -66,7 +68,7 @@ initializeApp window = do
 oldRendererToBehaviour :: IO (IO (), IO ()) -> IO Behaviour
 oldRendererToBehaviour act = do
   (render, cleanup) <- act
-  return $ Behaviour { eventFun = \_ -> return ()
+  return $ Behaviour { frameFun = \_ _ -> return ()
                      , renderFun = do
                          GL.clearColor $ GL.RGBA 0.2 0.3 0.3 1.0
                          GL.clear [GL.ClearColor]
@@ -74,9 +76,10 @@ oldRendererToBehaviour act = do
                      , cleanupFun = cleanup
                      }
 
-supportedRenderers = map oldRendererToBehaviour
-  [ texturedRectangle
-  , triangleWithPerVertexColor
+supportedRenderers = [texturedRectangle] ++ oldRenderers
+
+oldRenderers = map oldRendererToBehaviour
+  [ triangleWithPerVertexColor
   , triangleColorFromUniform
   , triangleUsingArray
   , doubleTrianglesArray
@@ -123,32 +126,40 @@ mainLoop st = do
 handleInput :: IORef AppState -> IO ()
 handleInput stRef = do
   st@(AppState{input, current}) <- readIORef stRef
-  nextSt <- go st
+  nextSt <- go st []
   writeIORef stRef nextSt
   where
-    go st@(AppState{input, current}) = do
+    go (st@(AppState{input, current})) behaviourEvents = do
       maybeEvent <- STM.atomically $ TQueue.tryReadTQueue input
       case maybeEvent of
-        Nothing ->
+        Nothing -> do
+          callFrameFun (frameFun current) behaviourEvents
           return st
         Just event -> do
-          nextSt <- handleEvent st event
-          go nextSt
+          wasHandled <- handleEvent st event
+          case wasHandled of
+            Nothing ->
+              go st (event:behaviourEvents)
+            Just nextState ->
+              go nextState behaviourEvents
 
+callFrameFun :: ([InputEvent] -> Float -> IO ()) -> [InputEvent] -> IO ()
+callFrameFun frameFun events = do
+  time <- double2Float . fromMaybe 0 <$> GLFW.getTime
+  frameFun events time
 
-handleEvent :: AppState -> InputEvent -> IO AppState
+handleEvent :: AppState -> InputEvent -> IO (Maybe AppState)
 handleEvent st (KeyEvent GLFW.Key'Escape _ _ _) = do
   GLFW.setWindowShouldClose (_window st) True
-  return st
+  return $ Just st
 handleEvent st (KeyEvent GLFW.Key'Space _ action _) = do
   case action of
     GLFW.KeyState'Released -> do
       cleanupFun $ current st
-      initializeNextState st
-    _ -> return st
-handleEvent st event = do
-  eventFun (current st) event
-  return st
+      Just <$> initializeNextState st
+    _ -> return $ Just st
+handleEvent st _ = do
+  return Nothing
 
 initializeNextState st@(AppState {current, states = s:ss}) = do
   current' <- s
