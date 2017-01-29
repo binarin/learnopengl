@@ -12,7 +12,7 @@ import qualified Data.ByteString as B
 
 import Behaviour
 
-data AppState = AppState { mix :: Float
+data AppState = AppState { mix :: !Float
                          , vbo :: GL.Buffer
                          , ebo :: GL.Buffer
                          , vao :: GL.VertexArray
@@ -92,8 +92,9 @@ initialize = do
       out vec4 color;
       uniform sampler2D ourTexture1;
       uniform sampler2D ourTexture2;
+      uniform float mixCoeff;
       void main() {
-        color = mix(texture(ourTexture1, TexCoord), texture(ourTexture2, TexCoord), 0.2);
+        color = mix(texture(ourTexture1, TexCoord), texture(ourTexture2, TexCoord), mixCoeff);
       }
       |]
 
@@ -101,8 +102,16 @@ initialize = do
   return $ AppState{..}
 
 
+handleInput :: InputEvent -> AppState -> AppState
+handleInput (KeyEvent GLFW.Key'A _ GLFW.KeyState'Released _) st = st { mix = rotateMix }
+  where rotateMix = clamp $ mix st + 0.1
+        clamp mix
+          | mix > 1.0 = 0
+          | otherwise = mix
+handleInput _ st = st
+
 frame :: [InputEvent] -> Float -> AppState -> AppState
-frame _ _ st = st
+frame events _ st = foldr handleInput st events
 
 render :: AppState -> IO ()
 render AppState{..} = do
@@ -120,6 +129,9 @@ render AppState{..} = do
   GL.bindTexture GL.Texture2D texFace
   loc2 <- GL.getUniformLocation prog "ourTexture2"
   GL.uniform1i loc2 1
+
+  locMix <- GL.getUniformLocation prog "mixCoeff"
+  GL.uniform1f locMix $ mix
 
   GL.bindVertexArray vao
   GL.drawElements GL.TypeTriangles 6 GL.ElementGLuint
