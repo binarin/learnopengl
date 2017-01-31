@@ -70,6 +70,7 @@ module GLWrap ( createShader
               , LL.TextureUnit(..)
               , LL.activeTexture
               , stdProgram
+              , LL.uniformMatrix4fv
               ) where
 
 import Graphics.GL.Core33

@@ -32,3 +32,6 @@ executable learnopengl
                      , JuicyPixels
                      , vector
                      , stm
+                     , linear
+                     , distributive
+                     , lens

@@ -10,10 +10,11 @@ import Data.Array.MArray (newListArray)
 import Data.Array.Storable (withStorableArray)
 import Foreign.Storable (peek, Storable)
 import Foreign.Marshal.Utils (with)
-import Data.ByteString hiding (head, length, map, foldr)
+import Data.ByteString hiding (head, length, map, foldr, transpose)
 import qualified Data.ByteString.Unsafe as BU
 import GHC.Float (double2Float)
 import qualified Data.Vector.Storable as VS
+import Linear.Matrix
 
 newtype Shader = Shader GLuint
 
@@ -474,3 +475,8 @@ instance ToGL TextureUnit where
 
 activeTexture :: TextureUnit -> IO ()
 activeTexture unit = glActiveTexture (toGL unit)
+
+uniformMatrix4fv :: UniformLocation -> M44 Float -> IO ()
+uniformMatrix4fv (UniformLocation loc) mat =
+  with mat $ \ptr ->
+    glUniformMatrix4fv loc 1 GL_TRUE (castPtr (ptr :: Ptr (M44 Float)))

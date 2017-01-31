@@ -1,3 +1,4 @@
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -10,6 +11,14 @@ import qualified Graphics.UI.GLFW as GLFW
 import qualified GLWrap as GL
 import qualified Data.ByteString as B
 
+import Linear.Matrix
+import Linear.Quaternion (axisAngle)
+import Data.Distributive (distribute)
+import Linear.Vector
+import Linear.V3
+import Linear.V4
+import Control.Lens
+
 import Behaviour
 
 data AppState = AppState { mix :: !Float
@@ -19,6 +28,8 @@ data AppState = AppState { mix :: !Float
                          , texCont :: GL.Texture
                          , texFace :: GL.Texture
                          , prog :: GL.Program
+                         , transMat :: M44 Float
+                         , transMat2 :: M44 Float
                          }
 
 texturedRectangle = mkBehaviour initialize frame render cleanup
@@ -80,8 +91,9 @@ initialize = do
       layout (location = 2) in vec2 texCoord;
       out vec3 ourColor;
       out vec2 TexCoord;
+      uniform mat4 transform;
       void main() {
-        gl_Position = vec4(position, 1.0f);
+        gl_Position = transform * vec4(position, 1.0f);
         ourColor = color;
         TexCoord = vec2(texCoord.x, 1.0f-texCoord.y);
       }
@@ -98,7 +110,9 @@ initialize = do
       }
       |]
 
-  let mix = 0
+  let mix = 0.5
+  let transMat = identity
+  let transMat2 = identity
   return $ AppState{..}
 
 
@@ -111,10 +125,24 @@ handleInput (KeyEvent GLFW.Key'A _ GLFW.KeyState'Released _) st = st { mix = rot
 handleInput _ st = st
 
 frame :: [InputEvent] -> Float -> AppState -> AppState
-frame events _ st = foldr handleInput st events
+frame events t st = calcTransform t (applyEvents events st)
+  where
+    applyEvents events st = foldr handleInput st events
+    calcTransform t st = st { transMat = xlate !*! rot
+                            , transMat2 = xlate2 !*! scale
+                            }
+      where xlate :: M44 Float = identity & translation .~ V3 0.5 (-0.5) 0
+            xlate2 = identity & translation .~ V3 (-0.5) 0.5 0
+            rot :: M44 Float = m33_to_m44 $ fromQuaternion (axisAngle (V3 0 0 1) (t * pi / 4))
+            scaleScalar = abs (sin t)
+            scale :: M44 Float = scaled (V4 scaleScalar scaleScalar scaleScalar 1)
+
+
 
 render :: AppState -> IO ()
 render AppState{..} = do
+  transLoc <- GL.getUniformLocation prog "transform"
+
   GL.clearColor $ GL.RGBA 0.2 0.3 0.3 1.0
   GL.clear [GL.ClearColor]
 
@@ -134,7 +162,13 @@ render AppState{..} = do
   GL.uniform1f locMix $ mix
 
   GL.bindVertexArray vao
+
+  GL.uniformMatrix4fv transLoc transMat
   GL.drawElements GL.TypeTriangles 6 GL.ElementGLuint
+
+  GL.uniformMatrix4fv transLoc transMat2
+  GL.drawElements GL.TypeTriangles 6 GL.ElementGLuint
+
   GL.unbindVertexArray
 
 cleanup :: AppState -> IO ()
