@@ -139,8 +139,8 @@ frame events t st = calcTransform t (applyEvents events st)
 
 
 
-render :: AppState -> IO ()
-render AppState{..} = do
+render :: AppState -> GL.Width -> GL.Height -> IO ()
+render AppState{..} _ _ = do
   transLoc <- GL.getUniformLocation prog "transform"
 
   GL.clearColor $ GL.RGBA 0.2 0.3 0.3 1.0

@@ -71,6 +71,13 @@ module GLWrap ( createShader
               , LL.activeTexture
               , stdProgram
               , LL.uniformMatrix4fv
+              , Texture2DParams(..)
+              , load2DTexture
+              , Angle(..)
+              , rotationMatrix
+              , perspectiveMatrix
+              , translationMatrix
+              , uniform2DTexture
               ) where
 
 import Graphics.GL.Core33
@@ -85,6 +92,12 @@ import Control.Exception
 import Control.Monad
 import Data.Monoid
 import Data.Text.Encoding (decodeUtf8With)
+import Data.Default
+import Linear.Matrix
+import Linear.V3
+import Linear.Quaternion
+import Linear.Projection
+import Control.Lens
 import qualified Codec.Picture as P
 
 import qualified GLWrap.LowLevel as LL
@@ -162,3 +175,54 @@ stdProgram vertexSrc fragmentSrc = do
   LL.useProgram prog
   mapM_ LL.deleteShader ([vertexShader, fragmentShader] :: [LL.Shader])
   return prog
+
+data Texture2DParams =
+  Texture2DParams { wrapS :: LL.TextureWrapParameter
+                  , wrapT :: LL.TextureWrapParameter
+                  , minFilter :: LL.TextureMinFilter
+                  , magFilter :: LL.TextureMagFilter
+                  }
+
+instance Default Texture2DParams where
+  def = Texture2DParams { wrapS = LL.ClampToEdge
+                        , wrapT = LL.ClampToEdge
+                        , minFilter = LL.MinLinear
+                        , magFilter = LL.MagLinear
+                        }
+
+load2DTexture :: Texture2DParams -> FilePath -> IO LL.Texture
+load2DTexture Texture2DParams{..} file = do
+  tex <- LL.genTexture
+  LL.bindTexture LL.Texture2D tex
+  LL.texParameter LL.Texture2D (LL.TextureWrapS wrapS)
+  LL.texParameter LL.Texture2D (LL.TextureWrapT wrapT)
+  LL.texParameter LL.Texture2D (LL.TextureMinFilter minFilter)
+  LL.texParameter LL.Texture2D (LL.TextureMagFilter magFilter)
+  texImage2D file
+  LL.generateMipmap LL.Texture2D
+  LL.unbindTexture LL.Texture2D
+  return $ tex
+
+data Angle = Deg Float
+           | Rad Float
+
+toRad :: Angle -> Float
+toRad (Deg a) = a * pi / 180
+
+rotationMatrix :: Angle -> V3 Float -> M44 Float
+rotationMatrix angle axis =
+  m33_to_m44 $ fromQuaternion $ axisAngle axis (toRad angle)
+
+translationMatrix :: V3 Float -> M44 Float
+translationMatrix vec =
+  identity & translation .~ vec
+
+perspectiveMatrix :: Angle -> Float -> Float -> Float -> M44 Float
+perspectiveMatrix fov aspect near far =
+  perspective (toRad fov) aspect near far
+
+uniform2DTexture :: LL.Texture -> LL.TextureUnit -> LL.UniformLocation -> IO ()
+uniform2DTexture tex unit loc = do
+  LL.activeTexture unit
+  LL.bindTexture LL.Texture2D tex
+  LL.uniform1i loc (fromIntegral $ fromEnum unit)

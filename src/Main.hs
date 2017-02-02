@@ -22,6 +22,7 @@ import qualified GLWrap as GL
 import Hello
 import Textures
 import Behaviour
+import Coordinate (staticMatrixStack)
 
 type EventQueue = TQueue.TQueue InputEvent
 
@@ -29,6 +30,8 @@ data AppState = AppState { _window :: GLFW.Window
                          , input :: EventQueue
                          , states :: [IO Behaviour]
                          , current :: Behaviour
+                         , screenWidth :: GL.Width
+                         , screenHeight :: GL.Height
                          }
 
 main :: IO ()
@@ -44,7 +47,7 @@ main = do
       GLFW.makeContextCurrent $ Just window
       (width, height) <- GLFW.getFramebufferSize window
       GL.viewport (GL.WinCoord 0) (GL.WinCoord 0) (GL.toWidth width) (GL.toHeight height)
-      appState <- initializeApp window
+      appState <- initializeApp window width height
       appStateRef <- newIORef appState
       GLFW.setKeyCallback window $ Just $ keyCallback (input appState)
       mainLoop appStateRef
@@ -54,8 +57,8 @@ main = do
       putStrLn err
       exitFailure
 
-initializeApp :: GLFW.Window -> IO AppState
-initializeApp window = do
+initializeApp :: GLFW.Window -> Int -> Int -> IO AppState
+initializeApp window width height = do
   let r:rs = supportedRenderers
   input <- TQueue.newTQueueIO
   behaviour <- r
@@ -63,20 +66,25 @@ initializeApp window = do
                     , states = rs ++ [r]
                     , current = behaviour
                     , input = input
+                    , screenWidth = GL.Width (fromIntegral width)
+                    , screenHeight = GL.Height (fromIntegral height)
                     }
 
 oldRendererToBehaviour :: IO (IO (), IO ()) -> IO Behaviour
 oldRendererToBehaviour act = do
   (render, cleanup) <- act
   return $ Behaviour { frameFun = \_ _ -> return ()
-                     , renderFun = do
+                     , renderFun = \_ _ -> do
                          GL.clearColor $ GL.RGBA 0.2 0.3 0.3 1.0
                          GL.clear [GL.ClearColor]
                          render
                      , cleanupFun = cleanup
                      }
 
-supportedRenderers = [texturedRectangle] ++ oldRenderers
+supportedRenderers =
+  [ staticMatrixStack
+  , texturedRectangle
+  ] ++ oldRenderers
 
 oldRenderers = map oldRendererToBehaviour
   [ triangleWithPerVertexColor
@@ -168,7 +176,7 @@ initializeNextState st@(AppState {current, states = s:ss}) = do
 render :: IORef AppState -> IO ()
 render st = do
   AppState{..} <- readIORef st
-  renderFun current
+  renderFun current screenWidth screenHeight
   return ()
 
 errorCb err desc = do

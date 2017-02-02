@@ -35,3 +35,5 @@ executable learnopengl
                      , linear
                      , distributive
                      , lens
+                     , containers
+                     , data-default
