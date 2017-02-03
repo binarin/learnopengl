@@ -10,6 +10,7 @@ import Data.Default
 import qualified GLWrap as GL
 import Linear.V3
 import Linear.Matrix
+import Control.Monad
 
 import Behaviour
 
@@ -22,6 +23,7 @@ data State = State { vbo :: GL.Buffer
                    , prog :: GL.Program
                    , model :: M44 Float
                    , view :: M44 Float
+                   , currentTime :: Float
                    }
 
 
@@ -82,6 +84,8 @@ cubeWithTextureCoords = do
   GL.vertexAttribPointer 1 2 GL.AttribPointerFloat False 20 12
   GL.enableVertexAttribArray 1
 
+  GL.enable GL.DepthTest
+
   return $ (vao, vbo)
 
 quadWithTextureCoords :: IO (GL.VertexArray, GL.Buffer)
@@ -141,6 +145,7 @@ initialize = do
 
   let model = identity
   let view = identity
+  let currentTime = 0
   return $ State {..}
 
 frame :: [InputEvent] -> Float -> State -> State
@@ -150,10 +155,26 @@ frame _ time st =
   in
     st{ model = model
       , view = view
+      , currentTime = time
       }
 
 screenRatio :: GL.Width -> GL.Height -> Float
 screenRatio (GL.Width w) (GL.Height h) = fromIntegral w / fromIntegral h
+
+
+cubePositions :: [V3 Float]
+cubePositions = [
+     V3 0.0 0.0 0.0,
+     V3 2.0 5.0 (-15.0),
+     V3 (-1.5) (-2.2) (-2.5),
+     V3 (-3.8) (-2.0) (-12.3),
+     V3 2.4 (-0.4) (-3.5),
+     V3 (-1.7)  3.0 (-7.5),
+     V3 1.3 (-2.0) (-2.5),
+     V3 1.5  2.0 (-2.5),
+     V3 1.5  0.2 (-1.5),
+     V3 (-1.3)  1.0 (-1.5)
+    ]
 
 render :: State -> GL.Width -> GL.Height -> IO ()
 render State{..} width height = do
@@ -171,18 +192,26 @@ render State{..} width height = do
   GL.uniform2DTexture texFace GL.Texture1 tex2loc
 
   GL.uniformMatrix4fv viewLoc view
-  GL.uniformMatrix4fv modelLoc model
   GL.uniformMatrix4fv projectionLoc projection
 
-  GL.enable GL.DepthTest
   GL.clearColor $ GL.RGBA 0.2 0.3 0.3 1.0
   GL.clear [GL.ClearColor, GL.ClearDepth]
 
   GL.bindVertexArray vao
-  GL.drawArrays GL.TypeTriangles 0 36
+
+  forM_ (zip cubePositions [0..]) $ \(pos, idx) -> do
+    let addRot = if idx `mod` 3 == 0 then 10 * currentTime else 0
+    let model = GL.translationMatrix pos !*! GL.rotationMatrix (GL.Deg $ 20.0 * fromIntegral idx + addRot) (V3 1 0.3 0.5)
+    GL.uniformMatrix4fv modelLoc model
+    GL.drawArrays GL.TypeTriangles 0 36
+
   GL.unbindVertexArray
 
 
 cleanup :: State -> IO ()
-cleanup st = do
+cleanup State{..} = do
+  GL.disable GL.DepthTest
+  GL.deleteBuffers [vbo]
+  GL.deleteVertexArrays [vao]
+  GL.deleteProgram prog
   return ()

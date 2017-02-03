@@ -484,5 +484,11 @@ uniformMatrix4fv (UniformLocation loc) mat =
 
 data Capability = DepthTest
 
+instance ToGL Capability where
+  toGLenum DepthTest = GL_DEPTH_TEST
+
 enable :: Capability -> IO ()
-enable DepthTest = glEnable GL_DEPTH_TEST
+enable cap = glEnable (toGL cap)
+
+disable :: Capability -> IO ()
+disable cap = glDisable (toGL cap)

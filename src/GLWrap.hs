@@ -80,6 +80,7 @@ module GLWrap ( createShader
               , uniform2DTexture
               , LL.Capability(..)
               , LL.enable
+              , LL.disable
               ) where
 
 import Graphics.GL.Core33
