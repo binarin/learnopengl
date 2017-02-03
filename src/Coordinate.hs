@@ -24,6 +24,66 @@ data State = State { vbo :: GL.Buffer
                    , view :: M44 Float
                    }
 
+
+cubeWithTextureCoords :: IO (GL.VertexArray, GL.Buffer)
+cubeWithTextureCoords = do
+  vbo <- GL.genBuffer
+  vao <- GL.genVertexArray
+
+  GL.bindVertexArray vao
+  GL.bindBuffer GL.TargetArray vbo
+  GL.floatBufferData GL.TargetArray GL.UsageStaticDraw
+   [ -0.5, -0.5, -0.5,  0.0, 0.0,
+      0.5, -0.5, -0.5,  1.0, 0.0,
+      0.5,  0.5, -0.5,  1.0, 1.0,
+      0.5,  0.5, -0.5,  1.0, 1.0,
+     -0.5,  0.5, -0.5,  0.0, 1.0,
+     -0.5, -0.5, -0.5,  0.0, 0.0,
+
+     -0.5, -0.5,  0.5,  0.0, 0.0,
+      0.5, -0.5,  0.5,  1.0, 0.0,
+      0.5,  0.5,  0.5,  1.0, 1.0,
+      0.5,  0.5,  0.5,  1.0, 1.0,
+     -0.5,  0.5,  0.5,  0.0, 1.0,
+     -0.5, -0.5,  0.5,  0.0, 0.0,
+
+     -0.5,  0.5,  0.5,  1.0, 0.0,
+     -0.5,  0.5, -0.5,  1.0, 1.0,
+     -0.5, -0.5, -0.5,  0.0, 1.0,
+     -0.5, -0.5, -0.5,  0.0, 1.0,
+     -0.5, -0.5,  0.5,  0.0, 0.0,
+     -0.5,  0.5,  0.5,  1.0, 0.0,
+
+      0.5,  0.5,  0.5,  1.0, 0.0,
+      0.5,  0.5, -0.5,  1.0, 1.0,
+      0.5, -0.5, -0.5,  0.0, 1.0,
+      0.5, -0.5, -0.5,  0.0, 1.0,
+      0.5, -0.5,  0.5,  0.0, 0.0,
+      0.5,  0.5,  0.5,  1.0, 0.0,
+
+     -0.5, -0.5, -0.5,  0.0, 1.0,
+      0.5, -0.5, -0.5,  1.0, 1.0,
+      0.5, -0.5,  0.5,  1.0, 0.0,
+      0.5, -0.5,  0.5,  1.0, 0.0,
+     -0.5, -0.5,  0.5,  0.0, 0.0,
+     -0.5, -0.5, -0.5,  0.0, 1.0,
+
+     -0.5,  0.5, -0.5,  0.0, 1.0,
+      0.5,  0.5, -0.5,  1.0, 1.0,
+      0.5,  0.5,  0.5,  1.0, 0.0,
+      0.5,  0.5,  0.5,  1.0, 0.0,
+     -0.5,  0.5,  0.5,  0.0, 0.0,
+     -0.5,  0.5, -0.5,  0.0, 1.0
+    ]
+
+  GL.vertexAttribPointer 0 3 GL.AttribPointerFloat False 20 0
+  GL.enableVertexAttribArray 0
+
+  GL.vertexAttribPointer 1 2 GL.AttribPointerFloat False 20 12
+  GL.enableVertexAttribArray 1
+
+  return $ (vao, vbo)
+
 quadWithTextureCoords :: IO (GL.VertexArray, GL.Buffer)
 quadWithTextureCoords = do
   vbo <- GL.genBuffer
@@ -51,7 +111,7 @@ quadWithTextureCoords = do
 
 initialize :: IO State
 initialize = do
-  (vao, vbo) <- quadWithTextureCoords
+  (vao, vbo) <- cubeWithTextureCoords
   texCont <- GL.load2DTexture def "container.jpg"
   texFace <- GL.load2DTexture def "awesomeface.png"
 
@@ -85,7 +145,7 @@ initialize = do
 
 frame :: [InputEvent] -> Float -> State -> State
 frame _ time st =
-  let model = GL.rotationMatrix (GL.Deg $ -55) (V3 1 0 0)
+  let model = GL.rotationMatrix (GL.Deg $ time * 50) (V3 0.5 1 0)
       view = GL.translationMatrix (V3 0 0 (-3))
   in
     st{ model = model
@@ -93,7 +153,7 @@ frame _ time st =
       }
 
 screenRatio :: GL.Width -> GL.Height -> Float
-screenRatio (GL.Width w) (GL.Height h) = fromIntegral h / fromIntegral w
+screenRatio (GL.Width w) (GL.Height h) = fromIntegral w / fromIntegral h
 
 render :: State -> GL.Width -> GL.Height -> IO ()
 render State{..} width height = do
@@ -114,11 +174,12 @@ render State{..} width height = do
   GL.uniformMatrix4fv modelLoc model
   GL.uniformMatrix4fv projectionLoc projection
 
+  GL.enable GL.DepthTest
   GL.clearColor $ GL.RGBA 0.2 0.3 0.3 1.0
-  GL.clear [GL.ClearColor]
+  GL.clear [GL.ClearColor, GL.ClearDepth]
 
   GL.bindVertexArray vao
-  GL.drawArrays GL.TypeTriangles 0 6
+  GL.drawArrays GL.TypeTriangles 0 36
   GL.unbindVertexArray
 
 

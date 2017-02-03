@@ -213,9 +213,9 @@ serializePolygonMode PolyPoint = GL_POINT
 polygonMode matFace polyMode =
   glPolygonMode (serializeMaterialFace matFace) (serializePolygonMode polyMode)
 
-newtype WinCoord = WinCoord GLint
-newtype Width = Width GLsizei
-newtype Height = Height GLsizei
+newtype WinCoord = WinCoord GLint deriving (Show)
+newtype Width = Width GLsizei deriving (Show)
+newtype Height = Height GLsizei deriving (Show)
 
 viewport :: WinCoord -> WinCoord -> Width -> Height -> IO ()
 viewport (WinCoord x) (WinCoord y) (Width w) (Height h) =
@@ -480,3 +480,9 @@ uniformMatrix4fv :: UniformLocation -> M44 Float -> IO ()
 uniformMatrix4fv (UniformLocation loc) mat =
   with mat $ \ptr ->
     glUniformMatrix4fv loc 1 GL_TRUE (castPtr (ptr :: Ptr (M44 Float)))
+
+
+data Capability = DepthTest
+
+enable :: Capability -> IO ()
+enable DepthTest = glEnable GL_DEPTH_TEST

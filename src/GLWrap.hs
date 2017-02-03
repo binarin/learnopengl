@@ -78,6 +78,8 @@ module GLWrap ( createShader
               , perspectiveMatrix
               , translationMatrix
               , uniform2DTexture
+              , LL.Capability(..)
+              , LL.enable
               ) where
 
 import Graphics.GL.Core33
