@@ -23,6 +23,7 @@ executable learnopengl
                      , Textures
                      , Behaviour
                      , Coordinate
+                     , Camera
   build-depends:       base >= 4.7 && < 5
                      , GLFW-b
                      , OpenGLRaw
@@ -38,3 +39,4 @@ executable learnopengl
                      , lens
                      , containers
                      , data-default
+                     , mtl
