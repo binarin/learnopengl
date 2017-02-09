@@ -40,3 +40,5 @@ executable learnopengl
                      , containers
                      , data-default
                      , mtl
+                     , reflex
+                     , reflex-host
