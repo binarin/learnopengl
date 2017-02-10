@@ -10,6 +10,7 @@ type Scancode = Int
 
 data InputEvent = KeyEvent GLFW.Key Scancode GLFW.KeyState GLFW.ModifierKeys
                 | MouseEvent Float Float
+                | ScrollEvent Float Float
   deriving (Show)
 
 type Keys = Set.Set GLFW.Key

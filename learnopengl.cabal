@@ -24,6 +24,7 @@ executable learnopengl
                      , Behaviour
                      , Coordinate
                      , Camera
+                     , Utils
   build-depends:       base >= 4.7 && < 5
                      , GLFW-b
                      , OpenGLRaw

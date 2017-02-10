@@ -211,6 +211,7 @@ data Angle = Deg Float
 
 toRad :: Angle -> Float
 toRad (Deg a) = a * pi / 180
+toRad (Rad a) = a
 
 rotationMatrix :: Angle -> V3 Float -> M44 Float
 rotationMatrix angle axis =

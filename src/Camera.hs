@@ -22,6 +22,8 @@ import Linear.Projection (lookAt)
 import Linear.Metric (normalize)
 import Debug.Trace
 
+import Utils
+
 data Camera = Camera { _camPos :: V3 Float
                      , _camUp :: V3 Float
                      , _camYaw :: Float
@@ -37,12 +39,8 @@ camUp = lens _camUp $ \c u -> c { _camUp = u }
 camYaw :: Lens' Camera Float
 camYaw = lens _camYaw $ \c y -> c { _camYaw = y }
 
-
 clampPitch :: Float -> Float
-clampPitch p
-  | p < -89 = -89
-  | p > 89 = 89
-  | otherwise = p
+clampPitch = clamp (-89) 89
 
 camPitch :: Lens' Camera Float
 camPitch = lens _camPitch $ \c p -> c { _camPitch = clampPitch p }

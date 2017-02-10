@@ -15,11 +15,12 @@ import Control.Monad
 import Control.Lens
 import Data.Default
 import Control.Monad.State (execState, get)
-import Debug.Trace
+import Debug.Trace as Trace
 
 import qualified Graphics.UI.GLFW as GLFW
 import Behaviour
 import Camera
+import Utils
 
 staticMatrixStack = mkBehaviour initialize frame render cleanup
 
@@ -34,6 +35,8 @@ data State = State { vbo :: GL.Buffer
                    , _camera :: Camera
                    , _speed :: Float
                    , _sensitivity :: Float
+                   , _fov :: Float
+                   , _fovSensitivity :: Float
                    }
 
 
@@ -76,6 +79,8 @@ initialize = do
 
   let _sensitivity = 0.05
   let _speed = 0.5
+  let _fov = 45
+  let _fovSensitivity = 15
   return $ State {..}
 
 appKeys :: Lens' State Keys
@@ -98,6 +103,12 @@ appSpeed = lens _speed $ \st s -> st { _speed = s }
 appSensitivity :: Lens' State Float
 appSensitivity = lens _sensitivity $ \st s -> st { _sensitivity = s }
 
+appFov :: Lens' State Float
+appFov = lens _fov $ \st f -> st { _fov = clamp 30 170 f }
+
+appFovSensitivity :: Lens' State Float
+appFovSensitivity = lens _fovSensitivity $ \st fs -> st { _fovSensitivity = fs }
+
 frame :: [InputEvent] -> Float -> State -> State
 frame events time st = flip execState st $ do
   appKeys %= processKeyEvents events
@@ -106,6 +117,7 @@ frame events time st = flip execState st $ do
   delta <- use appDelta
   appCamera %= processCameraCommands keys delta
   appCamera %= processCameraPan delta
+  appFov %= (+ fovDelta * delta * st^.appFovSensitivity * (-1))
   return ()
   where
     processKeyEvents events oldKeys = foldl trackKeys oldKeys events
@@ -114,6 +126,9 @@ frame events time st = flip execState st $ do
     (panYaw, panPitch) = foldl (\(ax, ay) (x, y) -> (ax + x, ay + y)) (0, 0) panEvents
     processCameraPan delta cam = cam & camYaw %~ (+ panYaw * delta * st^.appSensitivity)
                                      & camPitch %~ (+ panPitch * delta * st^.appSensitivity * (-1))
+
+    fovEvents = [ y | ScrollEvent _ y <- events ]
+    fovDelta = foldl (+) 0 fovEvents
 
     advance keys delta cam = case (Set.member GLFW.Key'W keys, Set.member GLFW.Key'S keys) of
       (True, _) -> camAdvance (delta * st^.appSpeed) cam
@@ -155,7 +170,7 @@ render (st@State{..}) width height = do
   viewLoc <- GL.getUniformLocation prog "view"
   projectionLoc <- GL.getUniformLocation prog "projection"
 
-  let projection = GL.perspectiveMatrix (GL.Deg 45) (screenRatio width height) 0.1 100
+  let projection = GL.perspectiveMatrix (GL.Deg $ st^.appFov) (screenRatio width height) 0.1 100
 
   GL.useProgram prog
 

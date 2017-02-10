@@ -52,6 +52,7 @@ main = do
       appState <- initializeApp window width height
       appStateRef <- newIORef appState
       GLFW.setKeyCallback window $ Just $ keyCallback (input appState)
+      GLFW.setScrollCallback window $ Just $ scrollCallback (input appState)
       GLFW.setCursorPosCallback window $ Just $ cursorCallback (input appState) (lastMousePos appState)
       mainLoop appStateRef
       return ()
@@ -118,6 +119,10 @@ maybeBracket action cleanup onErr onSuccess = do
 keyCallback :: EventQueue -> GLFW.Window -> GLFW.Key -> Int -> GLFW.KeyState -> GLFW.ModifierKeys -> IO ()
 keyCallback q window key scancode action mode =
   STM.atomically $ TQueue.writeTQueue q $ KeyEvent key scancode action mode
+
+scrollCallback :: EventQueue -> GLFW.Window -> Double -> Double -> IO ()
+scrollCallback q window dx dy =
+  STM.atomically $ TQueue.writeTQueue q $ ScrollEvent (double2Float dx) (double2Float dy)
 
 cursorCallback :: EventQueue -> STM.TVar (Maybe (Double, Double)) -> GLFW.Window -> Double -> Double -> IO ()
 cursorCallback q last window x y = STM.atomically $ do
