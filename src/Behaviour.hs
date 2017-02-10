@@ -9,6 +9,7 @@ import Data.IORef (readIORef, modifyIORef, newIORef)
 type Scancode = Int
 
 data InputEvent = KeyEvent GLFW.Key Scancode GLFW.KeyState GLFW.ModifierKeys
+                | MouseEvent Float Float
   deriving (Show)
 
 type Keys = Set.Set GLFW.Key
@@ -23,6 +24,7 @@ trackKeys keys (KeyEvent key _ action _) = modifySet key keys
   where modifySet = case action of
           GLFW.KeyState'Released -> Set.delete
           _ -> Set.insert
+trackKeys keys _ = keys
 
 type InitFun a = IO a
 type FrameFun a = [InputEvent] -> Float -> a -> a

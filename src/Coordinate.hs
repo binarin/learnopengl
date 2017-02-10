@@ -15,6 +15,7 @@ import Control.Monad
 import Control.Lens
 import Data.Default
 import Control.Monad.State (execState, get)
+import Debug.Trace
 
 import qualified Graphics.UI.GLFW as GLFW
 import Behaviour
@@ -31,7 +32,8 @@ data State = State { vbo :: GL.Buffer
                    , _frameTime :: Float
                    , _keys :: Keys
                    , _camera :: Camera
-                   , camSpeed :: Float
+                   , _speed :: Float
+                   , _sensitivity :: Float
                    }
 
 
@@ -69,9 +71,11 @@ initialize = do
   let _frameTime = 0
   let _keys = mempty
   let _camera = def & camPos .~ V3 0 0 3
-                    & camFront .~ V3 0 0 (-1)
                     & camUp .~ V3 0 1 0
-  let camSpeed = 0.05
+                    & camYaw .~ (-pi / 2)
+
+  let _sensitivity = 0.05
+  let _speed = 0.5
   return $ State {..}
 
 appKeys :: Lens' State Keys
@@ -88,25 +92,37 @@ appDelta = lens _frameTime $ \st ft -> st { _frameTime = ft }
 appCamera :: Lens' State Camera
 appCamera = lens _camera $ \st c -> st { _camera = c }
 
+appSpeed :: Lens' State Float
+appSpeed = lens _speed $ \st s -> st { _speed = s }
+
+appSensitivity :: Lens' State Float
+appSensitivity = lens _sensitivity $ \st s -> st { _sensitivity = s }
+
 frame :: [InputEvent] -> Float -> State -> State
-frame events time = execState $ do
+frame events time st = flip execState st $ do
   appKeys %= processKeyEvents events
   appTime .= time
   keys <- use appKeys
   delta <- use appDelta
   appCamera %= processCameraCommands keys delta
+  appCamera %= processCameraPan delta
   return ()
   where
     processKeyEvents events oldKeys = foldl trackKeys oldKeys events
 
+    panEvents = [ (x, y) | MouseEvent x y <- events ]
+    (panYaw, panPitch) = foldl (\(ax, ay) (x, y) -> (ax + x, ay + y)) (0, 0) panEvents
+    processCameraPan delta cam = cam & camYaw %~ (+ panYaw * delta * st^.appSensitivity)
+                                     & camPitch %~ (+ panPitch * delta * st^.appSensitivity * (-1))
+
     advance keys delta cam = case (Set.member GLFW.Key'W keys, Set.member GLFW.Key'S keys) of
-      (True, _) -> camAdvance 0.05 cam
-      (_, True) -> camAdvance (-0.05) cam
+      (True, _) -> camAdvance (delta * st^.appSpeed) cam
+      (_, True) -> camAdvance (negate . (*delta) $ st^.appSpeed) cam
       (_, _) -> cam
 
     strafe keys delta cam = case (Set.member GLFW.Key'A keys, Set.member GLFW.Key'D keys) of
-      (True, _) -> camStrafe (-0.05) cam
-      (_, True) -> camStrafe 0.05 cam
+      (True, _) -> camStrafe (negate . (*delta) $ st^.appSpeed) cam
+      (_, True) -> camStrafe (delta * st^.appSpeed) cam
       (_, _) -> cam
 
     processCameraCommands :: Keys -> Float -> Camera -> Camera

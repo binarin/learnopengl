@@ -1,4 +1,4 @@
-{-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE NamedFieldPuns, LambdaCase #-}
 {-# LANGUAGE ScopedTypeVariables, TypeFamilies #-}
 {-# LANGUAGE RecordWildCards, QuasiQuotes, OverloadedStrings, DuplicateRecordFields #-}
 
@@ -28,6 +28,7 @@ type EventQueue = TQueue.TQueue InputEvent
 
 data AppState = AppState { _window :: GLFW.Window
                          , input :: EventQueue
+                         , lastMousePos :: STM.TVar (Maybe (Double, Double))
                          , states :: [IO Behaviour]
                          , current :: Behaviour
                          , screenWidth :: GL.Width
@@ -44,12 +45,14 @@ main = do
     GLFW.windowHint $ GLFW.WindowHint'Resizable False
     let createAction = GLFW.createWindow 800 600 "LearnOpenGL" Nothing Nothing
     maybeBracket createAction GLFW.destroyWindow (exitWithErr "failed to create window") $ \window -> do
+      GLFW.setCursorInputMode window GLFW.CursorInputMode'Disabled
       GLFW.makeContextCurrent $ Just window
       (width, height) <- GLFW.getFramebufferSize window
       GL.viewport (GL.WinCoord 0) (GL.WinCoord 0) (GL.toWidth width) (GL.toHeight height)
       appState <- initializeApp window width height
       appStateRef <- newIORef appState
       GLFW.setKeyCallback window $ Just $ keyCallback (input appState)
+      GLFW.setCursorPosCallback window $ Just $ cursorCallback (input appState) (lastMousePos appState)
       mainLoop appStateRef
       return ()
   where
@@ -61,11 +64,13 @@ initializeApp :: GLFW.Window -> Int -> Int -> IO AppState
 initializeApp window width height = do
   let r:rs = supportedRenderers
   input <- TQueue.newTQueueIO
+  lastMousePos <- STM.newTVarIO $ Nothing
   behaviour <- r
   return $ AppState { _window = window
                     , states = rs ++ [r]
                     , current = behaviour
                     , input = input
+                    , lastMousePos = lastMousePos
                     , screenWidth = GL.Width (fromIntegral width)
                     , screenHeight = GL.Height (fromIntegral height)
                     }
@@ -113,6 +118,16 @@ maybeBracket action cleanup onErr onSuccess = do
 keyCallback :: EventQueue -> GLFW.Window -> GLFW.Key -> Int -> GLFW.KeyState -> GLFW.ModifierKeys -> IO ()
 keyCallback q window key scancode action mode =
   STM.atomically $ TQueue.writeTQueue q $ KeyEvent key scancode action mode
+
+cursorCallback :: EventQueue -> STM.TVar (Maybe (Double, Double)) -> GLFW.Window -> Double -> Double -> IO ()
+cursorCallback q last window x y = STM.atomically $ do
+  STM.readTVar last >>= \case
+    Just (lx, ly) -> do
+      let dx = x - lx
+          dy = y - ly
+      TQueue.writeTQueue q $ MouseEvent (double2Float dx) (double2Float dy)
+    Nothing -> return ()
+  STM.writeTVar last $ Just (x, y)
 
 appWindow :: IORef AppState -> IO GLFW.Window
 appWindow stateRef = do
