@@ -156,7 +156,7 @@ handleInput stRef = do
       maybeEvent <- STM.atomically $ TQueue.tryReadTQueue input
       case maybeEvent of
         Nothing -> do
-          callFrameFun (frameFun current) behaviourEvents
+          callFrameFun (frameFun current) (reverse behaviourEvents)
           return st
         Just event -> do
           wasHandled <- handleEvent st event
