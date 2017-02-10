@@ -23,6 +23,7 @@ import Hello
 import Textures
 import Behaviour
 import Coordinate (staticMatrixStack)
+import Lighting (lightingDemo)
 
 type EventQueue = TQueue.TQueue InputEvent
 
@@ -88,7 +89,8 @@ oldRendererToBehaviour act = do
                      }
 
 supportedRenderers =
-  [ staticMatrixStack
+  [ lightingDemo
+  , staticMatrixStack
   , texturedRectangle
   ] ++ oldRenderers
 

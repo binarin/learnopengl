@@ -12,6 +12,7 @@ module Camera
   , camAdvance
   , camStrafe
   , viewMatrix
+  , panCamera
   ) where
 
 import Linear.V3
@@ -78,6 +79,9 @@ V3 (-0.5) 0.0 0.0
 camStrafe :: Float -> Camera -> Camera
 camStrafe delta camera = camera { _camPos = _camPos camera + pure delta * strafeDirection }
   where strafeDirection = normalize (cross (camFront camera) (_camUp camera))
+
+panCamera :: (Float, Float) -> Camera -> Camera
+panCamera (yaw, pitch) = (camPitch %~ (+pitch)) . (camYaw %~ (+yaw))
 
 viewMatrix :: Camera -> M44 Float
 viewMatrix (cam@Camera{..}) = lookAt _camPos (_camPos + camFront cam) _camUp

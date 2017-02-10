@@ -43,3 +43,4 @@ executable learnopengl
                      , mtl
                      , reflex
                      , reflex-host
+                     , dependent-sum
