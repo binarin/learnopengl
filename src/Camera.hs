@@ -90,5 +90,5 @@ instance Default Camera where
   def = Camera { _camPos = V3 0 0 3
                , _camUp = V3 0 1 0
                , _camPitch = 0
-               , _camYaw = 0
+               , _camYaw = (-pi/2)
                }
