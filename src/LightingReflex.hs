@@ -1,3 +1,4 @@
+{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE Rank2Types #-}
@@ -8,11 +9,13 @@
 
 module LightingReflex where
 
+import Text.RawString.QQ
 import Control.Monad.Reader
 import Reflex
 import Data.Default
 import Linear.V3
-import Linear.V3
+import Linear.V4
+import Linear.Vector (scaled)
 import Linear.Matrix hiding (trace)
 import Control.Lens
 
@@ -24,42 +27,154 @@ import POV
 import Camera
 import Lighting (WhiteCube, mkWhiteCube, renderWhiteCube, MatrixStack(..))
 
+data LitCube = LitCube { vao :: GL.VertexArray
+                       , vbo :: GL.Buffer
+                       , prog :: GL.Program
+                       , locView :: GL.UniformLocation
+                       , locModel :: GL.UniformLocation
+                       , locProjection :: GL.UniformLocation
+                       , locLightColor :: GL.UniformLocation
+                       , locObjectColor :: GL.UniformLocation
+                       }
+
 data RenderState = RenderState { _whiteCube :: WhiteCube
+                               , _litCube :: LitCube
                                }
 makeLenses ''RenderState
 
 data GameState = GameState { _stPov :: POV
+                           , _lightPos :: V3 Float
                            , _delta :: Float
                            , _width :: GL.Width
                            , _height :: GL.Height
+                           , _lightColor :: V3 Float
+                           , _objectColor :: V3 Float
                            }
 makeLenses ''GameState
 
-instance Default GameState where
-  def = GameState pov delta width height
-    where pov = def & povCamera . camPos .~ (V3 0 0 10)
-                    & povCamera . camYaw .~ (-pi/2)
-          delta = 0
-          width = GL.Width 800
-          height = GL.Height 600
+
+data LitCubeColors = Colors (V3 Float) (V3 Float)
+renderLitCube :: MatrixStack -> LitCubeColors -> LitCube -> IO ()
+renderLitCube MatrixStack{stackModel, stackView, stackProjection}
+              (Colors lightColor objectColor)
+              LitCube{..} = do
+  GL.useProgram prog
+  GL.uniformMatrix4fv locView stackView
+  GL.uniformMatrix4fv locModel stackModel
+  GL.uniformMatrix4fv locProjection stackProjection
+  GL.uniform3f locObjectColor (objectColor^._x) (objectColor^._y) (objectColor^._z)
+  GL.uniform3f locLightColor (lightColor^._x) (lightColor^._y) (lightColor^._z)
+
+  GL.bindVertexArray vao
+  GL.drawArrays GL.TypeTriangles 0 36
+
+
+
+
+mkLitCube :: IO LitCube
+mkLitCube = do
+  vbo <- GL.genBuffer
+  vao <- GL.genVertexArray
+
+  GL.bindVertexArray vao
+  GL.bindBuffer GL.TargetArray vbo
+
+  GL.floatBufferData GL.TargetArray GL.UsageStaticDraw
+   [ -0.5, -0.5, -0.5,
+      0.5, -0.5, -0.5,
+      0.5,  0.5, -0.5,
+      0.5,  0.5, -0.5,
+     -0.5,  0.5, -0.5,
+     -0.5, -0.5, -0.5,
+
+     -0.5, -0.5,  0.5,
+      0.5, -0.5,  0.5,
+      0.5,  0.5,  0.5,
+      0.5,  0.5,  0.5,
+     -0.5,  0.5,  0.5,
+     -0.5, -0.5,  0.5,
+
+     -0.5,  0.5,  0.5,
+     -0.5,  0.5, -0.5,
+     -0.5, -0.5, -0.5,
+     -0.5, -0.5, -0.5,
+     -0.5, -0.5,  0.5,
+     -0.5,  0.5,  0.5,
+
+      0.5,  0.5,  0.5,
+      0.5,  0.5, -0.5,
+      0.5, -0.5, -0.5,
+      0.5, -0.5, -0.5,
+      0.5, -0.5,  0.5,
+      0.5,  0.5,  0.5,
+
+     -0.5, -0.5, -0.5,
+      0.5, -0.5, -0.5,
+      0.5, -0.5,  0.5,
+      0.5, -0.5,  0.5,
+     -0.5, -0.5,  0.5,
+     -0.5, -0.5, -0.5,
+
+     -0.5,  0.5, -0.5,
+      0.5,  0.5, -0.5,
+      0.5,  0.5,  0.5,
+      0.5,  0.5,  0.5,
+     -0.5,  0.5,  0.5,
+     -0.5,  0.5, -0.5
+    ]
+
+  GL.vertexAttribPointer 0 3 GL.AttribPointerFloat False 12 0
+  GL.enableVertexAttribArray 0
+
+  prog <- GL.stdProgram
+    ([r|
+      #version 330 core
+      layout (location = 0) in vec3 position;
+      uniform mat4 model;
+      uniform mat4 view;
+      uniform mat4 projection;
+      void main() {
+        gl_Position = projection * view * model * vec4(position, 1.0f);
+      }
+      |])
+    ([r|
+      #version 330 core
+      uniform vec3 objectColor;
+      uniform vec3 lightColor;
+      out vec4 color;
+      void main() {
+        color = vec4(lightColor * objectColor, 1.0f);
+      }
+      |])
+  locView <- GL.getUniformLocation prog "view"
+  locModel <- GL.getUniformLocation prog "model"
+  locProjection <- GL.getUniformLocation prog "projection"
+  locObjectColor <- GL.getUniformLocation prog "objectColor"
+  locLightColor <- GL.getUniformLocation prog "lightColor"
+
+  return $ LitCube {vao, vbo, prog, locProjection, locModel, locView, locObjectColor, locLightColor}
+
 
 renderer :: Renderer RenderState GameState
 renderer = Renderer initR renderR cleanupR
 
 initR _ = do
   ls <- mkWhiteCube
-  return $ RenderState { _whiteCube = ls }
+  litCube <- mkLitCube
+  return $ RenderState { _whiteCube = ls, _litCube = litCube }
 
 renderR gs rs = do
   GL.clearColor $ GL.RGBA 0.2 0.3 0.3 1.0
   GL.clear [GL.ClearColor, GL.ClearDepth]
-  putStrLn $ show (gs^.delta)
 
   let viewMat = povViewMat $ gs^.stPov
   let projectionMat = povProjectionMat (gs^.width) (gs^.height) (gs^.stPov)
-  let lightModelMat = identity
+  let lightModelMat = (GL.translationMatrix $ gs^.lightPos) !*! (scaled $ V4 0.2 0.2 0.2 1)
 
   renderWhiteCube (MatrixStack lightModelMat viewMat projectionMat) (rs^.whiteCube)
+
+  let cubeModelMat = identity
+  renderLitCube (MatrixStack cubeModelMat viewMat projectionMat) (Colors (gs^.lightColor)  (gs^.objectColor)) (rs^.litCube)
 
   return rs
 
@@ -113,7 +228,11 @@ guest = do
   te <- asks deltaTickEvent
   ti <- holdDyn 0.01 te
   cam <- camDyn CameraConfig
-  let st = GameState <$> cam <*> ti <*> constDyn (GL.Width 800) <*> constDyn (GL.Height 600)
+  let lightPos = constDyn $ V3 1.2 1 2
+      lightColor = constDyn $ V3 1 1 1
+      objectColor = constDyn $ V3 1 0.5 0.3
+
+  let st = GameState <$> cam <*> lightPos <*> ti <*> constDyn (GL.Width 800) <*> constDyn (GL.Height 600) <*> lightColor <*> objectColor
   return (renderer, current st)
 
 go :: IO ()

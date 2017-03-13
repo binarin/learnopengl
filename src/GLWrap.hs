@@ -51,6 +51,7 @@ module GLWrap ( createShader
               , LL.UniformLocation
               , getUniformLocation
               , LL.uniform4f
+              , LL.uniform3f
               , LL.uniform1f
               , LL.uniform1i
               , LL.Texture
