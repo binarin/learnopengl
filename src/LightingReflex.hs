@@ -32,12 +32,11 @@ data GameState = GameState { _stPov :: POV
                            , _delta :: Float
                            , _width :: GL.Width
                            , _height :: GL.Height
-                           , _lolo :: Bool
                            }
 makeLenses ''GameState
 
 instance Default GameState where
-  def = GameState pov delta width height False
+  def = GameState pov delta width height
     where pov = def & povCamera . camPos .~ (V3 0 0 10)
                     & povCamera . camYaw .~ (-pi/2)
           delta = 0
@@ -54,7 +53,7 @@ initR _ = do
 renderR gs rs = do
   GL.clearColor $ GL.RGBA 0.2 0.3 0.3 1.0
   GL.clear [GL.ClearColor, GL.ClearDepth]
-  putStrLn $ show (gs^.stPov.povCamera.camPitch)
+  putStrLn $ show (gs^.delta)
 
   let viewMat = povViewMat $ gs^.stPov
   let projectionMat = povProjectionMat (gs^.width) (gs^.height) (gs^.stPov)
@@ -89,7 +88,7 @@ keyToggle noKeyValue bindings = do
 
 camDyn :: forall t m. CameraConfig -> GLMonad t m (Dynamic t POV)
 camDyn conf = do
-  tick <- tickEvent
+  tick <- asks deltaTickEvent
   move <- keyToggle Nothing [(GLFW.Key'W, Just MoveForward)
                             ,(GLFW.Key'S, Just MoveBackward)
                             ]
@@ -100,23 +99,21 @@ camDyn conf = do
   scroll <- asks scrollEvent
   (ix, iy) <- lift $ sample $ current cursor
   cursorDeltaDyn <- fmap fst <$> foldDyn (\(cx, cy) ((dx, dy), (px, py)) -> ((cx - px, cy - py), (cx, cy))) ((0, 0), (ix, iy)) (updated cursor)
-  let cursorDeltaForTick = leftmost [Just <$> updated cursorDeltaDyn, const Nothing <$> updated tick]
+  let cursorDeltaForTick = leftmost [Just <$> updated cursorDeltaDyn, const Nothing <$> tick]
   pan <- lift $ holdDyn Nothing cursorDeltaForTick
-  fov <- lift $ holdDyn Nothing $ leftmost [Just . snd <$> scroll, const Nothing <$> updated tick]
-
+  fov <- lift $ holdDyn Nothing $ leftmost [Just . snd <$> scroll, const Nothing <$> tick]
+  td <- holdDyn 0.01 tick
   let a :: Dynamic t Advance = Advance <$> move <*> strafe <*> pan <*> fov
-      ea = (,) <$> a <*> tick
+      ea = (,) <$> a <*> td
 
   lift $ foldDyn (\(adv, dt) pov -> advancePov adv dt pov) def (updated ea)
 
 guest :: GLApp t m RenderState GameState
 guest = do
-  et <- asks eventTime
-  aP <- keyEvent GLFW.Key'A
-  delta <- fmap snd <$> foldDyn (\abs (prev, delta) -> (abs, abs - prev)) (0, 0) et
-  apd <- lift $ holdDyn False aP
+  te <- asks deltaTickEvent
+  ti <- holdDyn 0.01 te
   cam <- camDyn CameraConfig
-  let st = GameState <$> cam <*> constDyn 0 <*> constDyn (GL.Width 800) <*> constDyn (GL.Height 600) <*> apd
+  let st = GameState <$> cam <*> ti <*> constDyn (GL.Width 800) <*> constDyn (GL.Height 600)
   return (renderer, current st)
 
 go :: IO ()

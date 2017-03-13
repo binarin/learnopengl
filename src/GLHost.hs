@@ -8,7 +8,7 @@
 {-# LANGUAGE NamedFieldPuns #-}
 module GLHost
   ( Renderer(..)
-  , HostConfig(eventTime, cursorDyn, scrollEvent)
+  , HostConfig(eventTime, cursorDyn, scrollEvent, deltaTickEvent)
   , keyEvent
   , GLMonad
   , GLApp
@@ -53,6 +53,7 @@ data Renderer r s = Renderer { rendererInit :: s -> IO r
                              }
 
 data HostConfig t = HostConfig { eventTime :: Event t Float
+                               , deltaTickEvent :: Event t Float
                                , triggerTime :: IORef (Maybe (EventTrigger t Float))
                                , eventQueue :: TQueue.TQueue InputEvent
                                , keyEvents :: M.Map GLFW.Key (Event t Bool, IORef (Maybe (EventTrigger t Bool)))
@@ -188,8 +189,13 @@ host guest = do
     cursorCallback hostConfig window x y = do
       STM.atomically $ TQueue.writeTQueue (eventQueue hostConfig) $ MouseEvent (double2Float x) (double2Float y)
 
+    mkDeltaTickEvent e = do
+      initial <- liftIO $ double2Float . fromMaybe 0 <$> GLFW.getTime
+      fmap fst . updated <$> foldDyn (\cur (_, prev) -> ((cur - prev), cur)) (0.001, initial) e
+
     mkHostConfig window = do
       (e, eTriggerRef) <- newEventWithTriggerRef
+      deltaTickEvent <- mkDeltaTickEvent e
       eventQueue <- liftIO $ TQueue.newTQueueIO
       let allKeys = [GLFW.Key'Unknown .. GLFW.Key'Menu]
       keyEvents <- M.fromList <$> flip mapM allKeys (\k -> do
@@ -201,6 +207,7 @@ host guest = do
       cursorDyn <- holdDyn (double2Float cx, double2Float cy) cursorEvent
 
       return $ HostConfig { eventTime = e
+                          , deltaTickEvent = deltaTickEvent
                           , triggerTime = eTriggerRef
                           , eventQueue = eventQueue
                           , keyEvents = keyEvents
