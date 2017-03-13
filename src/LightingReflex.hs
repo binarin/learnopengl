@@ -15,8 +15,9 @@ import Reflex
 import Data.Default
 import Linear.V3
 import Linear.V4
-import Linear.Vector (scaled)
+import Linear.Vector (scaled, (^-^))
 import Linear.Matrix hiding (trace)
+import Linear.Metric (dot, normalize)
 import Control.Lens
 
 import GLHost
@@ -35,6 +36,7 @@ data LitCube = LitCube { vao :: GL.VertexArray
                        , locProjection :: GL.UniformLocation
                        , locLightColor :: GL.UniformLocation
                        , locObjectColor :: GL.UniformLocation
+                       , locLightPos :: GL.UniformLocation
                        }
 
 data RenderState = RenderState { _whiteCube :: WhiteCube
@@ -54,8 +56,9 @@ makeLenses ''GameState
 
 
 data LitCubeColors = Colors (V3 Float) (V3 Float)
-renderLitCube :: MatrixStack -> LitCubeColors -> LitCube -> IO ()
+renderLitCube :: MatrixStack -> V3 Float -> LitCubeColors -> LitCube -> IO ()
 renderLitCube MatrixStack{stackModel, stackView, stackProjection}
+              lightPos
               (Colors lightColor objectColor)
               LitCube{..} = do
   GL.useProgram prog
@@ -64,12 +67,21 @@ renderLitCube MatrixStack{stackModel, stackView, stackProjection}
   GL.uniformMatrix4fv locProjection stackProjection
   GL.uniform3f locObjectColor (objectColor^._x) (objectColor^._y) (objectColor^._z)
   GL.uniform3f locLightColor (lightColor^._x) (lightColor^._y) (lightColor^._z)
+  GL.uniform3f locLightPos (lightPos^._x) (lightPos^._y) (lightPos^._z)
 
   GL.bindVertexArray vao
   GL.drawArrays GL.TypeTriangles 0 36
 
 
-
+addNormals :: [V3 (V3 Float)] -> [Float]
+addNormals = concatMap unpackAndAddNormal
+  where
+    unpackAndAddNormal (V3 (a@(V3 ax ay az)) (b@(V3 bx by bz)) (c@(V3 cx cy cz))) =
+      let (V3 nx ny nz) = normalize $ (b ^-^ a) `cross` (c ^-^ a)
+      in [ax, ay, az, nx, ny, nz
+         ,bx, by, bz, nx, ny, nz
+         ,cx, cy, cz, nx, ny, nz
+         ]
 
 mkLitCube :: IO LitCube
 mkLitCube = do
@@ -79,71 +91,70 @@ mkLitCube = do
   GL.bindVertexArray vao
   GL.bindBuffer GL.TargetArray vbo
 
-  GL.floatBufferData GL.TargetArray GL.UsageStaticDraw
-   [ -0.5, -0.5, -0.5,
-      0.5, -0.5, -0.5,
-      0.5,  0.5, -0.5,
-      0.5,  0.5, -0.5,
-     -0.5,  0.5, -0.5,
-     -0.5, -0.5, -0.5,
+  let v1 :: V3 Float = V3 (-0.5) (-0.5) ( 0.5)
+      v2 = V3 ( 0.5) (-0.5) ( 0.5)
+      v3 = V3 ( 0.5) ( 0.5) ( 0.5)
+      v4 = V3 (-0.5) ( 0.5) ( 0.5)
+      v5 = V3 (-0.5) (-0.5) (-0.5)
+      v6 = V3 ( 0.5) (-0.5) (-0.5)
+      v7 = V3 ( 0.5) ( 0.5) (-0.5)
+      v8 = V3 (-0.5) ( 0.5) (-0.5)
 
-     -0.5, -0.5,  0.5,
-      0.5, -0.5,  0.5,
-      0.5,  0.5,  0.5,
-      0.5,  0.5,  0.5,
-     -0.5,  0.5,  0.5,
-     -0.5, -0.5,  0.5,
+      triangles = [ V3 v1 v2 v3
+                  , V3 v3 v4 v1
+                  , V3 v7 v3 v2
+                  , V3 v2 v6 v7
+                  , V3 v5 v1 v8
+                  , V3 v8 v1 v4
+                  , V3 v3 v7 v4
+                  , V3 v7 v8 v4
+                  , V3 v1 v6 v2
+                  , V3 v1 v5 v6
+                  , V3 v8 v7 v6
+                  , V3 v5 v8 v6
+                  ]
 
-     -0.5,  0.5,  0.5,
-     -0.5,  0.5, -0.5,
-     -0.5, -0.5, -0.5,
-     -0.5, -0.5, -0.5,
-     -0.5, -0.5,  0.5,
-     -0.5,  0.5,  0.5,
+  GL.floatBufferData GL.TargetArray GL.UsageStaticDraw (addNormals triangles)
 
-      0.5,  0.5,  0.5,
-      0.5,  0.5, -0.5,
-      0.5, -0.5, -0.5,
-      0.5, -0.5, -0.5,
-      0.5, -0.5,  0.5,
-      0.5,  0.5,  0.5,
-
-     -0.5, -0.5, -0.5,
-      0.5, -0.5, -0.5,
-      0.5, -0.5,  0.5,
-      0.5, -0.5,  0.5,
-     -0.5, -0.5,  0.5,
-     -0.5, -0.5, -0.5,
-
-     -0.5,  0.5, -0.5,
-      0.5,  0.5, -0.5,
-      0.5,  0.5,  0.5,
-      0.5,  0.5,  0.5,
-     -0.5,  0.5,  0.5,
-     -0.5,  0.5, -0.5
-    ]
-
-  GL.vertexAttribPointer 0 3 GL.AttribPointerFloat False 12 0
+  GL.vertexAttribPointer 0 3 GL.AttribPointerFloat False 24 0
   GL.enableVertexAttribArray 0
+
+  GL.vertexAttribPointer 1 3 GL.AttribPointerFloat False 24 12
+  GL.enableVertexAttribArray 1
 
   prog <- GL.stdProgram
     ([r|
       #version 330 core
       layout (location = 0) in vec3 position;
+      layout (location = 1) in vec3 normal;
       uniform mat4 model;
       uniform mat4 view;
       uniform mat4 projection;
+      out vec3 Normal;
+      out vec3 FragPos;
       void main() {
         gl_Position = projection * view * model * vec4(position, 1.0f);
+        FragPos = vec3(model * vec4(position, 1.0f));
+        Normal = normal;
       }
       |])
     ([r|
       #version 330 core
       uniform vec3 objectColor;
       uniform vec3 lightColor;
+      uniform vec3 lightPos;
+      in vec3 Normal;
+      in vec3 FragPos;
       out vec4 color;
       void main() {
-        color = vec4(lightColor * objectColor, 1.0f);
+        vec3 norm = normalize(Normal);
+        vec3 lightDir = normalize(lightPos - FragPos);
+        float diff = max(dot(norm, lightDir), 0.0);
+        vec3 diffuse = diff * lightColor;
+        float ambientStrength = 0.1f;
+        vec3 ambient = ambientStrength * lightColor;
+        vec3 result = (ambient + diffuse) * objectColor;
+        color = vec4(result, 1.0f);
       }
       |])
   locView <- GL.getUniformLocation prog "view"
@@ -151,8 +162,9 @@ mkLitCube = do
   locProjection <- GL.getUniformLocation prog "projection"
   locObjectColor <- GL.getUniformLocation prog "objectColor"
   locLightColor <- GL.getUniformLocation prog "lightColor"
+  locLightPos <- GL.getUniformLocation prog "lightPos"
 
-  return $ LitCube {vao, vbo, prog, locProjection, locModel, locView, locObjectColor, locLightColor}
+  return $ LitCube {vao, vbo, prog, locProjection, locModel, locView, locObjectColor, locLightColor, locLightPos}
 
 
 renderer :: Renderer RenderState GameState
@@ -161,10 +173,11 @@ renderer = Renderer initR renderR cleanupR
 initR _ = do
   ls <- mkWhiteCube
   litCube <- mkLitCube
+  GL.enable GL.DepthTest
   return $ RenderState { _whiteCube = ls, _litCube = litCube }
 
 renderR gs rs = do
-  GL.clearColor $ GL.RGBA 0.2 0.3 0.3 1.0
+  GL.clearColor $ GL.RGBA 0 0 0 1
   GL.clear [GL.ClearColor, GL.ClearDepth]
 
   let viewMat = povViewMat $ gs^.stPov
@@ -174,7 +187,7 @@ renderR gs rs = do
   renderWhiteCube (MatrixStack lightModelMat viewMat projectionMat) (rs^.whiteCube)
 
   let cubeModelMat = identity
-  renderLitCube (MatrixStack cubeModelMat viewMat projectionMat) (Colors (gs^.lightColor)  (gs^.objectColor)) (rs^.litCube)
+  renderLitCube (MatrixStack cubeModelMat viewMat projectionMat) (gs^.lightPos) (Colors (gs^.lightColor)  (gs^.objectColor)) (rs^.litCube)
 
   return rs
 
