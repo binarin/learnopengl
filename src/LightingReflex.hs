@@ -67,7 +67,9 @@ renderLitCube MatrixStack{stackModel, stackView, stackProjection}
   GL.uniformMatrix4fv locProjection stackProjection
   GL.uniform3f locObjectColor (objectColor^._x) (objectColor^._y) (objectColor^._z)
   GL.uniform3f locLightColor (lightColor^._x) (lightColor^._y) (lightColor^._z)
-  GL.uniform3f locLightPos (lightPos^._x) (lightPos^._y) (lightPos^._z)
+
+  let lpV = stackView !* point lightPos
+  GL.uniform3f locLightPos (lpV^._x) (lpV^._y) (lpV^._z)
 
   GL.bindVertexArray vao
   GL.drawArrays GL.TypeTriangles 0 36
@@ -134,8 +136,8 @@ mkLitCube = do
       out vec3 FragPos;
       void main() {
         gl_Position = projection * view * model * vec4(position, 1.0f);
-        FragPos = vec3(model * vec4(position, 1.0f));
-        Normal = normal;
+        FragPos = vec3(view * model * vec4(position, 1.0f));
+        Normal = mat3(transpose(inverse(view * model))) * normal;
       }
       |])
     ([r|
@@ -148,12 +150,21 @@ mkLitCube = do
       out vec4 color;
       void main() {
         vec3 norm = normalize(Normal);
+
         vec3 lightDir = normalize(lightPos - FragPos);
         float diff = max(dot(norm, lightDir), 0.0);
         vec3 diffuse = diff * lightColor;
+
         float ambientStrength = 0.1f;
         vec3 ambient = ambientStrength * lightColor;
-        vec3 result = (ambient + diffuse) * objectColor;
+
+        float specularStrength = 0.5f;
+        vec3 viewDir = normalize(-FragPos);
+        vec3 reflectDir = reflect(-lightDir, norm);
+        float spec = pow(max(dot(viewDir, reflectDir),0.0f), 32);
+        vec3 specular = specularStrength * spec * lightColor;
+
+        vec3 result = (ambient + diffuse + specular) * objectColor;
         color = vec4(result, 1.0f);
       }
       |])
