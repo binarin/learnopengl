@@ -250,12 +250,13 @@ camDyn conf = do
 guest :: GLApp t m RenderState GameState
 guest = do
   te <- asks deltaTickEvent
+  totalTime <- asks eventTime
   ti <- holdDyn 0.01 te
   cam <- camDyn CameraConfig
-  let lightPos = constDyn $ V3 1.2 1 2
-      lightColor = constDyn $ V3 1 1 1
+  let lightColor = constDyn $ V3 1 1 1
       objectColor = constDyn $ V3 1 0.5 0.3
 
+  lightPos <- lift $ foldDyn (\a (V3 x y z) -> V3 x (sin a) z) (V3 1.2 1 2) totalTime
   let st = GameState <$> cam <*> lightPos <*> ti <*> constDyn (GL.Width 800) <*> constDyn (GL.Height 600) <*> lightColor <*> objectColor
   return (renderer, current st)
 
