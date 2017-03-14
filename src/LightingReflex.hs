@@ -318,10 +318,19 @@ guest = do
   ti <- holdDyn 0.01 te
   cam <- camDyn CameraConfig
   let material = constDyn $ def
-      light = constDyn $ def
 
   lightPos <- lift $ foldDyn (\a (V3 x y z) -> V3 x (sin a) z) (V3 1.2 1 2) totalTime
-  let st = GameState <$> cam <*> ti <*> constDyn (GL.Width 800) <*> constDyn (GL.Height 600) <*> material <*> light
+  let lightColor = fmap (\t -> V3 (2 * sin t) (0.7 * sin t) (1.3 * sin t)) totalTime
+      diffuseColor = (*0.5) <$> lightColor
+      ambientColor = (*0.2) <$> lightColor
+
+  lightColorDyn <- lift $ holdDyn 0 lightColor
+  diffuseColorDyn <- lift $ holdDyn 0 diffuseColor
+  ambientColorDyn <- lift $ holdDyn 0 ambientColor
+  let
+    light = Light <$> lightPos <*> ambientColorDyn <*> diffuseColorDyn <*> constDyn 1
+    st = GameState <$> cam <*> ti <*> constDyn (GL.Width 800) <*> constDyn (GL.Height 600) <*> material <*> light
+
   return (renderer, current st)
 
 go :: IO ()
