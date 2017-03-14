@@ -1,4 +1,5 @@
 {-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE RankNTypes #-}
@@ -38,29 +39,57 @@ data LitCube = LitCube { vao :: GL.VertexArray
                        , locView :: GL.UniformLocation
                        , locModel :: GL.UniformLocation
                        , locProjection :: GL.UniformLocation
-                       , locLightColor :: GL.UniformLocation
                        , locMaterial :: MaterialUniform
-                       , locLightPos :: GL.UniformLocation
+                       , locLight :: LightUniform
                        }
 
-data Material = Material { matAmbient :: V3 Float
-                         , matDiffuse :: V3 Float
-                         , matSpecular :: V3 Float
-                         , matShininess :: Float
+data Material = Material { _matAmbient :: V3 Float
+                         , _matDiffuse :: V3 Float
+                         , _matSpecular :: V3 Float
+                         , _matShininess :: Float
                          }
 
-instance Default Material where
-  def = Material { matAmbient = 0.1
-                 , matDiffuse = 0.3
-                 , matSpecular = 0.5
-                 , matShininess = 32
-                 }
+
+data Light = Light { _lightPosition :: V3 Float
+                   , _lightAmbient :: V3 Float
+                   , _lightDiffuse :: V3 Float
+                   , _lightSpecular :: V3 Float
+                   }
+
+data LightUniform = LightUniform { locPosition :: GL.UniformLocation
+                                 , locAmbient :: GL.UniformLocation
+                                 , locDiffuse :: GL.UniformLocation
+                                 , locSpecular :: GL.UniformLocation
+                                 }
+
 
 data MaterialUniform = MaterialUniform { locAmbient :: GL.UniformLocation
                                        , locDiffuse :: GL.UniformLocation
                                        , locSpecular :: GL.UniformLocation
                                        , locShininess :: GL.UniformLocation
                                        }
+
+
+data RenderState = RenderState { _whiteCube :: WhiteCube
+                               , _litCube :: LitCube
+                               }
+
+data GameState = GameState { _stPov :: POV
+                           , _delta :: Float
+                           , _width :: GL.Width
+                           , _height :: GL.Height
+                           , _material :: Material
+                           , _light :: Light
+                           }
+
+
+data LitCubeColors = Colors (V3 Float) Material
+
+makeLenses ''Material
+makeLenses ''Light
+makeLenses ''RenderState
+makeLenses ''GameState
+
 
 initMaterialUniform :: GL.Program -> B.ByteString -> IO MaterialUniform
 initMaterialUniform prog structName = do
@@ -75,33 +104,16 @@ vec3Uniform loc (V3 x y z) = GL.uniform3f loc x y z
 
 materialUniform :: MaterialUniform -> Material -> IO ()
 materialUniform MaterialUniform{..} Material{..} = do
-  vec3Uniform locAmbient matAmbient
-  vec3Uniform locDiffuse matDiffuse
-  vec3Uniform locSpecular matSpecular
-  GL.uniform1f locShininess matShininess
+  vec3Uniform locAmbient _matAmbient
+  vec3Uniform locDiffuse _matDiffuse
+  vec3Uniform locSpecular _matSpecular
+  GL.uniform1f locShininess _matShininess
 
 
-data RenderState = RenderState { _whiteCube :: WhiteCube
-                               , _litCube :: LitCube
-                               }
-makeLenses ''RenderState
-
-data GameState = GameState { _stPov :: POV
-                           , _lightPos :: V3 Float
-                           , _delta :: Float
-                           , _width :: GL.Width
-                           , _height :: GL.Height
-                           , _lightColor :: V3 Float
-                           , _material :: Material
-                           }
-makeLenses ''GameState
-
-
-data LitCubeColors = Colors (V3 Float) Material
-renderLitCube :: MatrixStack -> V3 Float -> LitCubeColors -> LitCube -> IO ()
+renderLitCube :: MatrixStack -> Material -> Light -> LitCube -> IO ()
 renderLitCube MatrixStack{stackModel, stackView, stackProjection}
-              lightPos
-              (Colors lightColor material)
+              material
+              light
               LitCube{..} = do
   GL.useProgram prog
   GL.uniformMatrix4fv locView stackView
@@ -109,10 +121,7 @@ renderLitCube MatrixStack{stackModel, stackView, stackProjection}
   GL.uniformMatrix4fv locProjection stackProjection
 
   materialUniform locMaterial material
-  GL.uniform3f locLightColor (lightColor^._x) (lightColor^._y) (lightColor^._z)
-
-  let lpV = stackView !* point lightPos
-  GL.uniform3f locLightPos (lpV^._x) (lpV^._y) (lpV^._z)
+  lightUniform locLight light stackView
 
   GL.bindVertexArray vao
   GL.drawArrays GL.TypeTriangles 0 36
@@ -186,9 +195,6 @@ mkLitCube = do
       |])
     ([r|
       #version 330 core
-      uniform vec3 lightColor;
-      uniform vec3 lightPos;
-
       struct Material {
         vec3 ambient;
         vec3 diffuse;
@@ -197,22 +203,31 @@ mkLitCube = do
       };
       uniform Material material;
 
+      struct Light {
+        vec3 position;
+        // colors
+        vec3 ambient;
+        vec3 diffuse;
+        vec3 specular;
+      };
+      uniform Light light;
+
       in vec3 Normal;
       in vec3 FragPos;
       out vec4 color;
 
       void main() {
-        vec3 ambient = material.ambient * lightColor;
+        vec3 ambient = material.ambient * light.ambient;
 
         vec3 norm = normalize(Normal);
-        vec3 lightDir = normalize(lightPos - FragPos);
+        vec3 lightDir = normalize(light.position - FragPos);
         float diff = max(dot(norm, lightDir), 0.0);
-        vec3 diffuse = (diff * material.diffuse) * lightColor;
+        vec3 diffuse = (diff * material.diffuse) * light.diffuse;
 
         vec3 viewDir = normalize(-FragPos);
         vec3 reflectDir = reflect(-lightDir, norm);
         float spec = pow(max(dot(viewDir, reflectDir),0.0f), material.shininess);
-        vec3 specular = (material.specular * spec) * lightColor;
+        vec3 specular = (material.specular * spec) * light.specular;
 
         vec3 result = ambient + diffuse + specular;
         color = vec4(result, 1.0f);
@@ -222,10 +237,9 @@ mkLitCube = do
   locModel <- GL.getUniformLocation prog "model"
   locProjection <- GL.getUniformLocation prog "projection"
   locMaterial <- initMaterialUniform prog "material"
-  locLightColor <- GL.getUniformLocation prog "lightColor"
-  locLightPos <- GL.getUniformLocation prog "lightPos"
+  locLight <- initLightUniform prog "light"
 
-  return $ LitCube {vao, vbo, prog, locProjection, locModel, locView, locMaterial, locLightColor, locLightPos}
+  return $ LitCube {vao, vbo, prog, locProjection, locModel, locView, locMaterial, locLight}
 
 
 renderer :: Renderer RenderState GameState
@@ -243,12 +257,12 @@ renderR gs rs = do
 
   let viewMat = povViewMat $ gs^.stPov
   let projectionMat = povProjectionMat (gs^.width) (gs^.height) (gs^.stPov)
-  let lightModelMat = (GL.translationMatrix $ gs^.lightPos) !*! (scaled $ V4 0.2 0.2 0.2 1)
+  let lightModelMat = (GL.translationMatrix $ gs^.light.lightPosition) !*! (scaled $ V4 0.2 0.2 0.2 1)
 
   renderWhiteCube (MatrixStack lightModelMat viewMat projectionMat) (rs^.whiteCube)
 
   let cubeModelMat = identity
-  renderLitCube (MatrixStack cubeModelMat viewMat projectionMat) (gs^.lightPos) (Colors (gs^.lightColor) (gs^.material) ) (rs^.litCube)
+  renderLitCube (MatrixStack cubeModelMat viewMat projectionMat) (gs^.material) (gs^.light) (rs^.litCube)
 
   return rs
 
@@ -303,12 +317,45 @@ guest = do
   totalTime <- asks eventTime
   ti <- holdDyn 0.01 te
   cam <- camDyn CameraConfig
-  let lightColor = constDyn $ V3 1 1 1
-      material = constDyn $ def
+  let material = constDyn $ def
+      light = constDyn $ def
 
   lightPos <- lift $ foldDyn (\a (V3 x y z) -> V3 x (sin a) z) (V3 1.2 1 2) totalTime
-  let st = GameState <$> cam <*> lightPos <*> ti <*> constDyn (GL.Width 800) <*> constDyn (GL.Height 600) <*> lightColor <*> material
+  let st = GameState <$> cam <*> ti <*> constDyn (GL.Width 800) <*> constDyn (GL.Height 600) <*> material <*> light
   return (renderer, current st)
 
 go :: IO ()
 go = host guest
+
+instance Default Light where
+  def = Light { _lightPosition = V3 1.2 1 2
+              , _lightAmbient = 0.2
+              , _lightDiffuse = 0.5
+              , _lightSpecular = 1
+              }
+
+initLightUniform :: GL.Program -> B.ByteString -> IO LightUniform
+initLightUniform prog prefix = do
+  LightUniform
+    <$> GL.getUniformLocation prog (prefix <> ".position")
+    <*> GL.getUniformLocation prog (prefix <> ".ambient")
+    <*> GL.getUniformLocation prog (prefix <> ".diffuse")
+    <*> GL.getUniformLocation prog (prefix <> ".specular")
+
+lightUniform :: LightUniform -> Light -> M44 Float -> IO ()
+lightUniform LightUniform{..} Light{..} viewMat = do
+  vec3Uniform locPosition _lightPosition
+  vec3Uniform locAmbient _lightAmbient
+  vec3Uniform locDiffuse _lightDiffuse
+  vec3Uniform locSpecular _lightSpecular
+
+  let lpV = viewMat !* point _lightPosition
+  GL.uniform3f locPosition (lpV^._x) (lpV^._y) (lpV^._z)
+
+
+instance Default Material where
+  def = Material { _matAmbient = V3 1 0.5 0.31
+                 , _matDiffuse = V3 1 0.5 0.31
+                 , _matSpecular = 0.5
+                 , _matShininess = 32
+                 }
