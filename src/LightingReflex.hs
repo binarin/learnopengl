@@ -1,4 +1,5 @@
 {-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE Rank2Types #-}
@@ -9,6 +10,8 @@
 
 module LightingReflex where
 
+import Data.Monoid
+import qualified Data.Text as T
 import Text.RawString.QQ
 import Control.Monad.Reader
 import Reflex
@@ -19,6 +22,7 @@ import Linear.Vector (scaled, (^-^))
 import Linear.Matrix hiding (trace)
 import Linear.Metric (dot, normalize)
 import Control.Lens
+import qualified Data.ByteString as B
 
 import GLHost
 import qualified Data.Map as M
@@ -35,9 +39,47 @@ data LitCube = LitCube { vao :: GL.VertexArray
                        , locModel :: GL.UniformLocation
                        , locProjection :: GL.UniformLocation
                        , locLightColor :: GL.UniformLocation
-                       , locObjectColor :: GL.UniformLocation
+                       , locMaterial :: MaterialUniform
                        , locLightPos :: GL.UniformLocation
                        }
+
+data Material = Material { matAmbient :: V3 Float
+                         , matDiffuse :: V3 Float
+                         , matSpecular :: V3 Float
+                         , matShininess :: Float
+                         }
+
+instance Default Material where
+  def = Material { matAmbient = 0.1
+                 , matDiffuse = 0.3
+                 , matSpecular = 0.5
+                 , matShininess = 32
+                 }
+
+data MaterialUniform = MaterialUniform { locAmbient :: GL.UniformLocation
+                                       , locDiffuse :: GL.UniformLocation
+                                       , locSpecular :: GL.UniformLocation
+                                       , locShininess :: GL.UniformLocation
+                                       }
+
+initMaterialUniform :: GL.Program -> B.ByteString -> IO MaterialUniform
+initMaterialUniform prog structName = do
+  MaterialUniform
+    <$> GL.getUniformLocation prog (structName <> ".ambient")
+    <*> GL.getUniformLocation prog (structName <> ".diffuse")
+    <*> GL.getUniformLocation prog (structName <> ".specular")
+    <*> GL.getUniformLocation prog (structName <> ".shininess")
+
+vec3Uniform :: GL.UniformLocation -> V3 Float -> IO ()
+vec3Uniform loc (V3 x y z) = GL.uniform3f loc x y z
+
+materialUniform :: MaterialUniform -> Material -> IO ()
+materialUniform MaterialUniform{..} Material{..} = do
+  vec3Uniform locAmbient matAmbient
+  vec3Uniform locDiffuse matDiffuse
+  vec3Uniform locSpecular matSpecular
+  GL.uniform1f locShininess matShininess
+
 
 data RenderState = RenderState { _whiteCube :: WhiteCube
                                , _litCube :: LitCube
@@ -50,22 +92,23 @@ data GameState = GameState { _stPov :: POV
                            , _width :: GL.Width
                            , _height :: GL.Height
                            , _lightColor :: V3 Float
-                           , _objectColor :: V3 Float
+                           , _material :: Material
                            }
 makeLenses ''GameState
 
 
-data LitCubeColors = Colors (V3 Float) (V3 Float)
+data LitCubeColors = Colors (V3 Float) Material
 renderLitCube :: MatrixStack -> V3 Float -> LitCubeColors -> LitCube -> IO ()
 renderLitCube MatrixStack{stackModel, stackView, stackProjection}
               lightPos
-              (Colors lightColor objectColor)
+              (Colors lightColor material)
               LitCube{..} = do
   GL.useProgram prog
   GL.uniformMatrix4fv locView stackView
   GL.uniformMatrix4fv locModel stackModel
   GL.uniformMatrix4fv locProjection stackProjection
-  GL.uniform3f locObjectColor (objectColor^._x) (objectColor^._y) (objectColor^._z)
+
+  materialUniform locMaterial material
   GL.uniform3f locLightColor (lightColor^._x) (lightColor^._y) (lightColor^._z)
 
   let lpV = stackView !* point lightPos
@@ -134,6 +177,7 @@ mkLitCube = do
       uniform mat4 projection;
       out vec3 Normal;
       out vec3 FragPos;
+
       void main() {
         gl_Position = projection * view * model * vec4(position, 1.0f);
         FragPos = vec3(view * model * vec4(position, 1.0f));
@@ -142,40 +186,46 @@ mkLitCube = do
       |])
     ([r|
       #version 330 core
-      uniform vec3 objectColor;
       uniform vec3 lightColor;
       uniform vec3 lightPos;
+
+      struct Material {
+        vec3 ambient;
+        vec3 diffuse;
+        vec3 specular;
+        float shininess;
+      };
+      uniform Material material;
+
       in vec3 Normal;
       in vec3 FragPos;
       out vec4 color;
-      void main() {
-        vec3 norm = normalize(Normal);
 
+      void main() {
+        vec3 ambient = material.ambient * lightColor;
+
+        vec3 norm = normalize(Normal);
         vec3 lightDir = normalize(lightPos - FragPos);
         float diff = max(dot(norm, lightDir), 0.0);
-        vec3 diffuse = diff * lightColor;
+        vec3 diffuse = (diff * material.diffuse) * lightColor;
 
-        float ambientStrength = 0.1f;
-        vec3 ambient = ambientStrength * lightColor;
-
-        float specularStrength = 0.5f;
         vec3 viewDir = normalize(-FragPos);
         vec3 reflectDir = reflect(-lightDir, norm);
-        float spec = pow(max(dot(viewDir, reflectDir),0.0f), 32);
-        vec3 specular = specularStrength * spec * lightColor;
+        float spec = pow(max(dot(viewDir, reflectDir),0.0f), material.shininess);
+        vec3 specular = (material.specular * spec) * lightColor;
 
-        vec3 result = (ambient + diffuse + specular) * objectColor;
+        vec3 result = ambient + diffuse + specular;
         color = vec4(result, 1.0f);
       }
       |])
   locView <- GL.getUniformLocation prog "view"
   locModel <- GL.getUniformLocation prog "model"
   locProjection <- GL.getUniformLocation prog "projection"
-  locObjectColor <- GL.getUniformLocation prog "objectColor"
+  locMaterial <- initMaterialUniform prog "material"
   locLightColor <- GL.getUniformLocation prog "lightColor"
   locLightPos <- GL.getUniformLocation prog "lightPos"
 
-  return $ LitCube {vao, vbo, prog, locProjection, locModel, locView, locObjectColor, locLightColor, locLightPos}
+  return $ LitCube {vao, vbo, prog, locProjection, locModel, locView, locMaterial, locLightColor, locLightPos}
 
 
 renderer :: Renderer RenderState GameState
@@ -198,7 +248,7 @@ renderR gs rs = do
   renderWhiteCube (MatrixStack lightModelMat viewMat projectionMat) (rs^.whiteCube)
 
   let cubeModelMat = identity
-  renderLitCube (MatrixStack cubeModelMat viewMat projectionMat) (gs^.lightPos) (Colors (gs^.lightColor)  (gs^.objectColor)) (rs^.litCube)
+  renderLitCube (MatrixStack cubeModelMat viewMat projectionMat) (gs^.lightPos) (Colors (gs^.lightColor) (gs^.material) ) (rs^.litCube)
 
   return rs
 
@@ -254,10 +304,10 @@ guest = do
   ti <- holdDyn 0.01 te
   cam <- camDyn CameraConfig
   let lightColor = constDyn $ V3 1 1 1
-      objectColor = constDyn $ V3 1 0.5 0.3
+      material = constDyn $ def
 
   lightPos <- lift $ foldDyn (\a (V3 x y z) -> V3 x (sin a) z) (V3 1.2 1 2) totalTime
-  let st = GameState <$> cam <*> lightPos <*> ti <*> constDyn (GL.Width 800) <*> constDyn (GL.Height 600) <*> lightColor <*> objectColor
+  let st = GameState <$> cam <*> lightPos <*> ti <*> constDyn (GL.Width 800) <*> constDyn (GL.Height 600) <*> lightColor <*> material
   return (renderer, current st)
 
 go :: IO ()
