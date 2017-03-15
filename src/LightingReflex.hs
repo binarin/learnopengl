@@ -57,14 +57,15 @@ data LightUniform = LightUniform { locPosition :: GL.UniformLocation
                                  }
 
 data Material = Material { _matDiffuseImage :: FilePath
-                         , _matSpecular :: V3 Float
+                         , _matSpecularImage :: FilePath
                          , _matShininess :: Float
                          }
 
-data MaterialUniform = MaterialUniform { locSpecular :: GL.UniformLocation
-                                       , locShininess :: GL.UniformLocation
+data MaterialUniform = MaterialUniform { locShininess :: GL.UniformLocation
                                        , locTexture :: GL.UniformLocation
+                                       , locSpecularTexture :: GL.UniformLocation
                                        , textureId :: GL.Texture
+                                       , specularTextureId :: GL.Texture
                                        }
 
 data RenderState = RenderState { _whiteCube :: WhiteCube
@@ -88,34 +89,49 @@ makeLenses ''RenderState
 makeLenses ''GameState
 
 
-initMaterialUniform :: GL.Program -> B.ByteString -> IO MaterialUniform
-initMaterialUniform prog structName = do
-  textureId <- GL.genTexture
+initMaterialUniform :: Material -> GL.Program -> B.ByteString -> IO MaterialUniform
+initMaterialUniform mat prog structName = do
+  [textureId, specularTextureId] <- GL.genTextures 2
+
   GL.bindTexture GL.Texture2D textureId
   GL.texParameter GL.Texture2D (GL.TextureWrapS GL.ClampToEdge)
   GL.texParameter GL.Texture2D (GL.TextureWrapT GL.ClampToEdge)
   GL.texParameter GL.Texture2D (GL.TextureMinFilter GL.MinLinear)
   GL.texParameter GL.Texture2D (GL.TextureMagFilter GL.MagLinear)
-  GL.texImage2D "container2.png"
+  GL.texImage2D $ mat^.matDiffuseImage
+  GL.generateMipmap GL.Texture2D
+  GL.unbindTexture GL.Texture2D
+
+  GL.bindTexture GL.Texture2D specularTextureId
+  GL.texParameter GL.Texture2D (GL.TextureWrapS GL.ClampToEdge)
+  GL.texParameter GL.Texture2D (GL.TextureWrapT GL.ClampToEdge)
+  GL.texParameter GL.Texture2D (GL.TextureMinFilter GL.MinLinear)
+  GL.texParameter GL.Texture2D (GL.TextureMagFilter GL.MagLinear)
+  GL.texImage2D $ mat^.matSpecularImage
   GL.generateMipmap GL.Texture2D
   GL.unbindTexture GL.Texture2D
 
   MaterialUniform
-    <$> GL.getUniformLocation prog (structName <> ".specular")
-    <*> GL.getUniformLocation prog (structName <> ".shininess")
+    <$> GL.getUniformLocation prog (structName <> ".shininess")
     <*> GL.getUniformLocation prog (structName <> ".diffuse")
+    <*> GL.getUniformLocation prog (structName <> ".specular")
     <*> pure textureId
+    <*> pure specularTextureId
 
 vec3Uniform :: GL.UniformLocation -> V3 Float -> IO ()
 vec3Uniform loc (V3 x y z) = GL.uniform3f loc x y z
 
 materialUniform :: MaterialUniform -> Material -> IO ()
 materialUniform MaterialUniform{..} Material{..} = do
-  vec3Uniform locSpecular _matSpecular
   GL.uniform1f locShininess _matShininess
+
   GL.activeTexture GL.Texture0
   GL.bindTexture GL.Texture2D textureId
   GL.uniform1i locTexture 0
+
+  GL.activeTexture GL.Texture1
+  GL.bindTexture GL.Texture2D specularTextureId
+  GL.uniform1i locSpecularTexture 1
 
 renderLitCube :: MatrixStack -> Material -> Light -> LitCube -> IO ()
 renderLitCube MatrixStack{stackModel, stackView, stackProjection}
@@ -145,8 +161,8 @@ addNormals = concatMap unpackAndAddNormal
          ,cx, cy, cz, nx, ny, nz, cs, ct
          ]
 
-mkLitCube :: IO LitCube
-mkLitCube = do
+mkLitCube :: Material -> IO LitCube
+mkLitCube mat = do
   vbo <- GL.genBuffer
   vao <- GL.genVertexArray
 
@@ -222,7 +238,7 @@ mkLitCube = do
       #version 330 core
       struct Material {
         sampler2D diffuse;
-        vec3 specular;
+        sampler2D specular;
         float shininess;
       };
       uniform Material material;
@@ -242,26 +258,27 @@ mkLitCube = do
       out vec4 color;
 
       void main() {
-        vec3 ambient = light.ambient * vec3(texture(material.diffuse, TexCoords));
 
         vec3 norm = normalize(Normal);
         vec3 lightDir = normalize(light.position - FragPos);
         float diff = max(dot(norm, lightDir), 0.0);
-        vec3 diffuse = light.diffuse * diff * vec3(texture(material.diffuse, TexCoords));
 
         vec3 viewDir = normalize(-FragPos);
         vec3 reflectDir = reflect(-lightDir, norm);
         float spec = pow(max(dot(viewDir, reflectDir),0.0f), material.shininess);
-        vec3 specular = (material.specular * spec) * light.specular;
 
-        vec3 result = ambient + diffuse + specular;
-        color = vec4(result, 1.0f);
+        vec3 ambient = light.ambient * vec3(texture(material.diffuse, TexCoords));
+        vec3 diffuse = light.diffuse * diff * vec3(texture(material.diffuse, TexCoords));
+        vec3 specular = light.specular * spec * vec3(texture(material.specular, TexCoords));
+
+
+        color = vec4(ambient + diffuse + specular, 1.0f);
       }
       |])
   locView <- GL.getUniformLocation prog "view"
   locModel <- GL.getUniformLocation prog "model"
   locProjection <- GL.getUniformLocation prog "projection"
-  locMaterial <- initMaterialUniform prog "material"
+  locMaterial <- initMaterialUniform mat prog "material"
   locLight <- initLightUniform prog "light"
 
   return $ LitCube {vao, vbo, prog, locProjection, locModel, locView, locMaterial, locLight}
@@ -269,9 +286,9 @@ mkLitCube = do
 renderer :: Renderer RenderState GameState
 renderer = Renderer initR renderR cleanupR
 
-initR _ = do
+initR gs = do
   ls <- mkWhiteCube
-  litCube <- mkLitCube
+  litCube <- mkLitCube $ gs^.material
   GL.enable GL.DepthTest
   return $ RenderState { _whiteCube = ls, _litCube = litCube }
 
@@ -391,6 +408,6 @@ lightUniform LightUniform{..} Light{..} viewMat = do
 
 instance Default Material where
   def = Material { _matDiffuseImage = "container2.png"
-                 , _matSpecular = 0.5
+                 , _matSpecularImage = "container2_specular.png"
                  , _matShininess = 32
                  }
