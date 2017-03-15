@@ -25,6 +25,10 @@ executable learnopengl
                      , Coordinate
                      , Camera
                      , Utils
+                     , GLHost
+                     , Lighting
+                     , LightingReflex
+                     , POV
   build-depends:       base >= 4.7 && < 5
                      , GLFW-b
                      , OpenGLRaw

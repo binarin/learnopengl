@@ -18,6 +18,7 @@ import Control.Monad.Reader
 import Reflex
 import Data.Default
 import Linear.V3
+import Linear.V2
 import Linear.V4
 import Linear.Vector (scaled, (^-^))
 import Linear.Matrix hiding (trace)
@@ -43,13 +44,6 @@ data LitCube = LitCube { vao :: GL.VertexArray
                        , locLight :: LightUniform
                        }
 
-data Material = Material { _matAmbient :: V3 Float
-                         , _matDiffuse :: V3 Float
-                         , _matSpecular :: V3 Float
-                         , _matShininess :: Float
-                         }
-
-
 data Light = Light { _lightPosition :: V3 Float
                    , _lightAmbient :: V3 Float
                    , _lightDiffuse :: V3 Float
@@ -62,13 +56,16 @@ data LightUniform = LightUniform { locPosition :: GL.UniformLocation
                                  , locSpecular :: GL.UniformLocation
                                  }
 
+data Material = Material { _matDiffuseImage :: FilePath
+                         , _matSpecular :: V3 Float
+                         , _matShininess :: Float
+                         }
 
-data MaterialUniform = MaterialUniform { locAmbient :: GL.UniformLocation
-                                       , locDiffuse :: GL.UniformLocation
-                                       , locSpecular :: GL.UniformLocation
+data MaterialUniform = MaterialUniform { locSpecular :: GL.UniformLocation
                                        , locShininess :: GL.UniformLocation
+                                       , locTexture :: GL.UniformLocation
+                                       , textureId :: GL.Texture
                                        }
-
 
 data RenderState = RenderState { _whiteCube :: WhiteCube
                                , _litCube :: LitCube
@@ -93,22 +90,32 @@ makeLenses ''GameState
 
 initMaterialUniform :: GL.Program -> B.ByteString -> IO MaterialUniform
 initMaterialUniform prog structName = do
+  textureId <- GL.genTexture
+  GL.bindTexture GL.Texture2D textureId
+  GL.texParameter GL.Texture2D (GL.TextureWrapS GL.ClampToEdge)
+  GL.texParameter GL.Texture2D (GL.TextureWrapT GL.ClampToEdge)
+  GL.texParameter GL.Texture2D (GL.TextureMinFilter GL.MinLinear)
+  GL.texParameter GL.Texture2D (GL.TextureMagFilter GL.MagLinear)
+  GL.texImage2D "container2.png"
+  GL.generateMipmap GL.Texture2D
+  GL.unbindTexture GL.Texture2D
+
   MaterialUniform
-    <$> GL.getUniformLocation prog (structName <> ".ambient")
-    <*> GL.getUniformLocation prog (structName <> ".diffuse")
-    <*> GL.getUniformLocation prog (structName <> ".specular")
+    <$> GL.getUniformLocation prog (structName <> ".specular")
     <*> GL.getUniformLocation prog (structName <> ".shininess")
+    <*> GL.getUniformLocation prog (structName <> ".diffuse")
+    <*> pure textureId
 
 vec3Uniform :: GL.UniformLocation -> V3 Float -> IO ()
 vec3Uniform loc (V3 x y z) = GL.uniform3f loc x y z
 
 materialUniform :: MaterialUniform -> Material -> IO ()
 materialUniform MaterialUniform{..} Material{..} = do
-  vec3Uniform locAmbient _matAmbient
-  vec3Uniform locDiffuse _matDiffuse
   vec3Uniform locSpecular _matSpecular
   GL.uniform1f locShininess _matShininess
-
+  GL.activeTexture GL.Texture0
+  GL.bindTexture GL.Texture2D textureId
+  GL.uniform1i locTexture 0
 
 renderLitCube :: MatrixStack -> Material -> Light -> LitCube -> IO ()
 renderLitCube MatrixStack{stackModel, stackView, stackProjection}
@@ -127,14 +134,15 @@ renderLitCube MatrixStack{stackModel, stackView, stackProjection}
   GL.drawArrays GL.TypeTriangles 0 36
 
 
-addNormals :: [V3 (V3 Float)] -> [Float]
+type VecWithTexCoords = (V3 Float, V2 Float)
+addNormals :: [(VecWithTexCoords, VecWithTexCoords, VecWithTexCoords)] -> [Float]
 addNormals = concatMap unpackAndAddNormal
   where
-    unpackAndAddNormal (V3 (a@(V3 ax ay az)) (b@(V3 bx by bz)) (c@(V3 cx cy cz))) =
+    unpackAndAddNormal ((a@(V3 ax ay az), V2 as at), (b@(V3 bx by bz), V2 bs bt), (c@(V3 cx cy cz), V2 cs ct)) =
       let (V3 nx ny nz) = normalize $ (b ^-^ a) `cross` (c ^-^ a)
-      in [ax, ay, az, nx, ny, nz
-         ,bx, by, bz, nx, ny, nz
-         ,cx, cy, cz, nx, ny, nz
+      in [ax, ay, az, nx, ny, nz, as, at
+         ,bx, by, bz, nx, ny, nz, bs, bt
+         ,cx, cy, cz, nx, ny, nz, cs, ct
          ]
 
 mkLitCube :: IO LitCube
@@ -145,7 +153,7 @@ mkLitCube = do
   GL.bindVertexArray vao
   GL.bindBuffer GL.TargetArray vbo
 
-  let v1 :: V3 Float = V3 (-0.5) (-0.5) ( 0.5)
+  let v1 = V3 (-0.5) (-0.5) ( 0.5)
       v2 = V3 ( 0.5) (-0.5) ( 0.5)
       v3 = V3 ( 0.5) ( 0.5) ( 0.5)
       v4 = V3 (-0.5) ( 0.5) ( 0.5)
@@ -153,51 +161,67 @@ mkLitCube = do
       v6 = V3 ( 0.5) (-0.5) (-0.5)
       v7 = V3 ( 0.5) ( 0.5) (-0.5)
       v8 = V3 (-0.5) ( 0.5) (-0.5)
+      add2 a b v = (v, V2 a b)
+      tl = add2 0 0
+      tr = add2 1 0
+      bl = add2 0 1
+      br = add2 1 1
 
-      triangles = [ V3 v1 v2 v3
-                  , V3 v3 v4 v1
-                  , V3 v7 v3 v2
-                  , V3 v2 v6 v7
-                  , V3 v5 v1 v8
-                  , V3 v8 v1 v4
-                  , V3 v3 v7 v4
-                  , V3 v7 v8 v4
-                  , V3 v1 v6 v2
-                  , V3 v1 v5 v6
-                  , V3 v8 v7 v6
-                  , V3 v5 v8 v6
+      triangles = [ (bl v1, br v2, tr v3)
+                  , (tr v3, tl v4, bl v1)
+
+                  , (tr v7, tl v3, bl v2)
+                  , (bl v2, br v6, tr v7)
+
+                  , (bl v5, br v1, tl v8)
+                  , (tl v8, br v1, tr v4)
+
+                  , (br v3, tr v7, bl v4)
+                  , (tr v7, tl v8, bl v4)
+
+                  , (tl v1, br v6, tr v2)
+                  , (tl v1, bl v5, br v6)
+
+                  , (bl v6, br v5, tr v8)
+                  , (tr v8, tl v7, bl v6)
                   ]
 
   GL.floatBufferData GL.TargetArray GL.UsageStaticDraw (addNormals triangles)
 
-  GL.vertexAttribPointer 0 3 GL.AttribPointerFloat False 24 0
+  GL.vertexAttribPointer 0 3 GL.AttribPointerFloat False 32 0
   GL.enableVertexAttribArray 0
 
-  GL.vertexAttribPointer 1 3 GL.AttribPointerFloat False 24 12
+  GL.vertexAttribPointer 1 3 GL.AttribPointerFloat False 32 12
   GL.enableVertexAttribArray 1
+
+  GL.vertexAttribPointer 2 3 GL.AttribPointerFloat False 32 24
+  GL.enableVertexAttribArray 2
 
   prog <- GL.stdProgram
     ([r|
       #version 330 core
       layout (location = 0) in vec3 position;
       layout (location = 1) in vec3 normal;
+      layout (location = 2) in vec2 texCoords;
+
       uniform mat4 model;
       uniform mat4 view;
       uniform mat4 projection;
       out vec3 Normal;
       out vec3 FragPos;
+      out vec2 TexCoords;
 
       void main() {
         gl_Position = projection * view * model * vec4(position, 1.0f);
         FragPos = vec3(view * model * vec4(position, 1.0f));
         Normal = mat3(transpose(inverse(view * model))) * normal;
+        TexCoords = texCoords;
       }
       |])
     ([r|
       #version 330 core
       struct Material {
-        vec3 ambient;
-        vec3 diffuse;
+        sampler2D diffuse;
         vec3 specular;
         float shininess;
       };
@@ -214,15 +238,16 @@ mkLitCube = do
 
       in vec3 Normal;
       in vec3 FragPos;
+      in vec2 TexCoords;
       out vec4 color;
 
       void main() {
-        vec3 ambient = material.ambient * light.ambient;
+        vec3 ambient = light.ambient * vec3(texture(material.diffuse, TexCoords));
 
         vec3 norm = normalize(Normal);
         vec3 lightDir = normalize(light.position - FragPos);
         float diff = max(dot(norm, lightDir), 0.0);
-        vec3 diffuse = (diff * material.diffuse) * light.diffuse;
+        vec3 diffuse = light.diffuse * diff * vec3(texture(material.diffuse, TexCoords));
 
         vec3 viewDir = normalize(-FragPos);
         vec3 reflectDir = reflect(-lightDir, norm);
@@ -240,7 +265,6 @@ mkLitCube = do
   locLight <- initLightUniform prog "light"
 
   return $ LitCube {vao, vbo, prog, locProjection, locModel, locView, locMaterial, locLight}
-
 
 renderer :: Renderer RenderState GameState
 renderer = Renderer initR renderR cleanupR
@@ -298,6 +322,9 @@ camDyn conf = do
   strafe <- keyToggle Nothing [(GLFW.Key'A, Just StrafeLeft)
                               ,(GLFW.Key'D, Just StrafeRight)
                               ]
+  vertMove <- keyToggle Nothing [(GLFW.Key'Space, Just LiftUp)
+                                ,(GLFW.Key'C, Just LiftDown)
+                                ]
   cursor <- asks cursorDyn
   scroll <- asks scrollEvent
   (ix, iy) <- lift $ sample $ current cursor
@@ -306,7 +333,7 @@ camDyn conf = do
   pan <- lift $ holdDyn Nothing cursorDeltaForTick
   fov <- lift $ holdDyn Nothing $ leftmost [Just . snd <$> scroll, const Nothing <$> tick]
   td <- holdDyn 0.01 tick
-  let a :: Dynamic t Advance = Advance <$> move <*> strafe <*> pan <*> fov
+  let a :: Dynamic t Advance = Advance <$> move <*> strafe <*> vertMove <*> pan <*> fov
       ea = (,) <$> a <*> td
 
   lift $ foldDyn (\(adv, dt) pov -> advancePov adv dt pov) def (updated ea)
@@ -328,7 +355,7 @@ guest = do
   diffuseColorDyn <- lift $ holdDyn 0 diffuseColor
   ambientColorDyn <- lift $ holdDyn 0 ambientColor
   let
-    light = Light <$> lightPos <*> ambientColorDyn <*> diffuseColorDyn <*> constDyn 1
+    light = Light <$> constDyn (V3 1.2 1 2) <*> constDyn 1 <*> constDyn 1 <*> constDyn 1
     st = GameState <$> cam <*> ti <*> constDyn (GL.Width 800) <*> constDyn (GL.Height 600) <*> material <*> light
 
   return (renderer, current st)
@@ -363,8 +390,7 @@ lightUniform LightUniform{..} Light{..} viewMat = do
 
 
 instance Default Material where
-  def = Material { _matAmbient = V3 1 0.5 0.31
-                 , _matDiffuse = V3 1 0.5 0.31
+  def = Material { _matDiffuseImage = "container2.png"
                  , _matSpecular = 0.5
                  , _matShininess = 32
                  }

@@ -8,6 +8,7 @@ import Control.Lens
 import Control.Monad.State
 import Data.Default
 import Linear.Matrix
+import Linear.V3
 
 import Camera
 import Utils
@@ -30,10 +31,12 @@ instance Default POV where
 
 data Movement = MoveForward | MoveBackward
 data Strafe = StrafeLeft | StrafeRight
+data ChangeHeight = LiftUp | LiftDown
 makeLenses ''POV
 
 data Advance = Advance { _advMovement :: Maybe Movement
                        , _advStrafe :: Maybe Strafe
+                       , _advHeight :: Maybe ChangeHeight
                        , _advPan :: Maybe (Float, Float)
                        , _advFov :: Maybe Float
                        }
@@ -41,7 +44,7 @@ data Advance = Advance { _advMovement :: Maybe Movement
 makeLenses ''Advance
 
 advancePov :: Advance -> Float -> POV -> POV
-advancePov Advance{..} timeDelta pov = foldl (&) pov [maybeMove, maybeStrafe, maybePan, maybeFov]
+advancePov Advance{..} timeDelta pov = foldl (&) pov [maybeMove, maybeStrafe, maybePan, maybeFov, maybeHeight]
   where
     maybeMove :: POV -> POV
     maybeMove pov = case _advMovement of
@@ -66,6 +69,15 @@ advancePov Advance{..} timeDelta pov = foldl (&) pov [maybeMove, maybeStrafe, ma
     maybeFov pov = case _advFov of
       Nothing -> pov
       Just fov -> pov & povFov %~ (\f -> clamp 35 170 $ f + fov)
+
+    maybeHeight :: POV -> POV
+    maybeHeight pov = case _advHeight of
+      Nothing -> pov
+      Just m -> pov & povCamera . camPos . _y  %~ (+ verticalMovementAmount m)
+
+    verticalMovementAmount m = verticalMovementSign m * timeDelta * pov^.povSpeed
+    verticalMovementSign LiftUp = 1
+    verticalMovementSign LiftDown = -1
 
     movementAmount m = movementSign m * timeDelta *  pov^.povSpeed
     movementSign MoveBackward = -1

@@ -1,12 +1,13 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 module GLWrap.LowLevel where
 
+import Debug.Trace
 import Data.Bits
 import Foreign.Ptr
 import Graphics.GL.Core33
 import Foreign.Marshal.Alloc (alloca)
 import Foreign.Marshal.Array (allocaArray, peekArray)
-import Data.Array.MArray (newListArray)
+import Data.Array.MArray (newListArray, getElems, readArray, writeArray)
 import Data.Array.Storable (withStorableArray)
 import Foreign.Storable (peek, Storable)
 import Foreign.Marshal.Utils (with)
@@ -182,12 +183,14 @@ uintBufferData = bufferData4byte
 floatBufferData :: BufferTarget -> BufferUsage -> [GLfloat] -> IO ()
 floatBufferData = bufferData4byte
 
-bufferData4byte :: (Storable a) => BufferTarget -> BufferUsage -> [a] -> IO ()
+bufferData4byte :: (Storable a, Show a, Num a) => BufferTarget -> BufferUsage -> [a] -> IO ()
 bufferData4byte tgt usage lst = do
   let len = length lst
-  arr <- newListArray (0, len - 1) lst
-  withStorableArray arr $ \ptr ->
-    glBufferData (serializeTarget tgt) (fromIntegral $ 4 * len) ptr (serializeUsage usage)
+  -- XXX additional element added - need to check on non-intel
+  -- hardware whether it's my bug or driver bug
+  arr <- newListArray (0, len) lst
+  withStorableArray arr $ \ptr -> do
+    glBufferData (serializeTarget tgt) (fromIntegral $ 4 * (len + 1)) ptr (serializeUsage usage)
 
 data DrawElementType = ElementGLuint
 

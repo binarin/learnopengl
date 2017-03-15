@@ -24,6 +24,7 @@ import Textures
 import Behaviour
 import Coordinate (staticMatrixStack)
 import Lighting (lightingDemo)
+import qualified LightingReflex
 
 type EventQueue = TQueue.TQueue InputEvent
 
@@ -36,8 +37,10 @@ data AppState = AppState { _window :: GLFW.Window
                          , screenHeight :: GL.Height
                          }
 
-main :: IO ()
-main = do
+main = LightingReflex.go
+
+main' :: IO ()
+main' = do
   GLFW.setErrorCallback $ Just errorCb
   boolBracket GLFW.init GLFW.terminate (exitWithErr "init failed") $ do
     GLFW.windowHint $ GLFW.WindowHint'ContextVersionMajor 3
