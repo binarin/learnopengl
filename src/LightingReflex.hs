@@ -9,7 +9,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE QuasiQuotes #-}
 
-module LightingReflex where
+module Main where
 
 import Data.Monoid
 import qualified Data.Text as T
@@ -377,8 +377,8 @@ guest = do
 
   return (renderer, current st)
 
-go :: IO ()
-go = host guest
+main :: IO ()
+main = host guest
 
 instance Default Light where
   def = Light { _lightPosition = V3 1.2 1 2
